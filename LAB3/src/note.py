@@ -18,26 +18,29 @@ F = np.arange((nf*d*k)) + 1
 F = F.reshape((nf,d,k))
 """
 
-d = 4 #height
-k = 2 #width
-nf = 2 #number of filters
+d = 28 #height
+k = 5 #width
+nf = 4 #number of filters
 F = np.arange((nf*d*k)) + 1
 F = F.reshape((nf,d,k))
 
 
-wid = 4
-hei_x = 4
+wid = 28
+hei_x = 19
 X = np.arange(wid * hei_x) + 1
 X = X.reshape((wid, hei_x))
 
 dx, nlen = X.shape
 
+"""
+Notes:
+https://medium.com/analytics-vidhya/implementing-convolution-without-for-loops-in-numpy-ce111322a7cd
+https://stackoverflow.com/questions/16798888/2-d-convolution-as-a-matrix-matrix-multiplication
+"""
 
 def MakeMFMatrix(F, nlen):
 
 	nf,d,k = F.shape
-
-	print('nlen: ', nlen)
 
 	zero = np.zeros((nf, nlen))
 
@@ -47,37 +50,22 @@ def MakeMFMatrix(F, nlen):
 		else:
 			VF = np.vstack((VF, F[filter].flatten(order = 'F')))
 
-	print('VF: ', VF.shape)
-	print('zero: ', zero.shape)
+	MF = np.zeros(((nlen - k + 1)*nf, nlen*d))
 
-	for k in range(3):
+	step = 0
+	Nelements = VF[0].size
 
-		for i in range(3):
+	for i in range((nlen - k + 1)):
 
-			if i == k:
-				if i == 0:
-					MF = VF
-				else:
+		for j in range(nf):
 
-					MF = np.hstack((MF, VF))
-			else:
-				if i == 0:
-					MF = zero
-				else:
+			ind = j + i*nf
+			MF[ind, step:Nelements + step] = VF[j]
+			#print(VF[j])
 
-					MF = np.hstack((MF, zero))
+		step += d
 
-		if k == 0:
-			MF_tot = MF
-		else:
-			MF_tot = np.vstack((MF_tot, MF))
-
-	print('MF \n', MF_tot)
-	print('\n shape: ', MF_tot.shape)
-	return MF_tot
-	#vec_F = np.kron(I_3, vec_F)
-	#print(vec_F)
-
+	return MF
 
 def MakeMXMatrix(x_input, d, k, nf):
 
@@ -107,11 +95,11 @@ def MakeMXMatrix(x_input, d, k, nf):
 
 	return MX
 
-
 start = time.time()
 
 MF = MakeMFMatrix(F, nlen)
 MX = MakeMXMatrix(X.flatten(), d,k,nf)
+
 
 #print(F)
 for filter in range(nf):
@@ -122,12 +110,14 @@ for filter in range(nf):
 
 
 S1 = MX @ F_flattened
-print('=-=-=- MF & X -=-=-= ')
 
-print(MF.shape)
-print(X.size)
 S2 = MF @ X.flatten(order='F')
-#print(S1, S2)
+print(np.all(S1 == S2))
+
+print(MX.shape)
+
+S = S1.reshape((nf, nlen - 5 + 1))
+
 
 
 end = time.time()

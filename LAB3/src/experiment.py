@@ -9,8 +9,8 @@ start = time.time()
 
 data = getData()
 params = Params(
-    NF1 = 3, NF2  = 3,
-    widthF1 = 10, widthF2  = 10,
+    NF1 = 4, NF2  = 3,
+    widthF1 = 5, widthF2  = 10,
     eta  = 0.001, roh = 0.9)
 
 cnn = ConvNet()
