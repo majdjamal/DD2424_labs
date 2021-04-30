@@ -69,7 +69,8 @@ for i in range(Npts):
 
         name2vec[ind][j] = 1
 
-    names2matrix[:, i] = name2vec.flatten('F')
+    names2matrix[:, i] = name2vec.flatten(order = 'F')
+
 
 ##=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 ##  Creating one hot vector matrix
