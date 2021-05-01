@@ -1,26 +1,21 @@
 
 import numpy as np
-from utils.utils import softmax, ReLU, BatchCreator
+from utils.utils import softmax, ReLU, BatchCreator, vecX, vecF
 
 
 class ConvNet:
 
     def __init__(self):
 
-        self.W = None
-
         self.nlen = None
         self.dx = None
 
         self.F1 = None
         self.F2 = None
+        self.W = None
 
         self.MF1 = None
         self.MF2 = None
-
-    def convert2matrix(self, x, height, width):
-        x = x.reshape((height, width), order='F')
-        return x
 
     def MakeMFMatrix(self, F, nlen):
 
@@ -78,16 +73,18 @@ class ConvNet:
 
         return MX
 
-    def forward(self, MF1, MF2, W, x_input):
-        S1 = ReLU(MF1 @ x_input.T)
-        S2 = ReLU(MF2 @ S1)
-        S = W@S2
+    def forward(self, x_input):
+
+        S1 = ReLU(self.MF1 @ x_input)
+        S2 = ReLU(self.MF2 @ S1)
+        S = self.W@S2
         P = softmax(S)
         return S1, S2, S, P
 
-    def backward(self, S1, S2, S, P, W, XBatch, YBatch):
+    def backward(self, S1, S2, S, P, W, XBatch, YBatch, X_MX):
 
         _, Npts = P.shape
+        #Npts = 1
 
         G = - (YBatch - P)
 
@@ -95,7 +92,6 @@ class ConvNet:
 
         G = W.T @ G
         G = G * np.where(S2 > 0, 1, 0)
-
 
         #MakeMXMatrix(self, x_input, d, k, nf):
         nf,d,k = self.F2.shape
@@ -118,9 +114,8 @@ class ConvNet:
         dF1 = 0
         for j in range(Npts):
             g = G[:, j]
-            x = XBatch[j]
+            x = X_MX[:, j]
             mx = self.MakeMXMatrix(x, d, k, nf, self.dx, self.nlen)
-
             v = g.T @ mx
             dF1 += v
 
@@ -128,37 +123,15 @@ class ConvNet:
 
         return dW, dF2, dF1
 
-    def vecX(self, x):
-        """
-            OBS: To classify x data points, they need to pass through this
-            vector-converter.
-        """
-        return x.reshape((self.dx, self.nlen)).flatten(order = 'F')
 
-    def vecF(self, F):
-        """
-            OBS: To classify with filter F, it need to be flattened
-            through this converter.
-        """
-        nf,_,_ = F.shape
-        for filter in range(nf):
-
-        	if filter == 0:
-        		F_flattened = F[filter].flatten(order = 'F')
-        	else:
-        		F_flattened = np.hstack((F_flattened, F[filter].flatten(order = 'F')))
-
-        return F_flattened
-
-
-    def fit(self, data, params):
+    def fit(self, data, p):
 
         ##
         ##  Data
         ##
         X = data.X
         Y = data.Y
-        y = data.y
+        y = data.y - 1
 
         ##
         ##  Parameters
@@ -168,29 +141,93 @@ class ConvNet:
         Ndim, Npts = X.shape
         self.dx, self.nlen = data.NUnique, data.NLongest
         Nout, _ = Y.shape
-        epochs = params.epochs
-        n_batches = params.n_batches
+        epochs = p.epochs
+        n_batches = p.n_batches
 
-
-        #F1
+        #height of F1
         d = data.NUnique
-        k = params.widthF1
-        nf = params.NF1 #number of filters
 
-        #F2
-        d2 = params.NF1
-        k2 = params.widthF2
-        nf2 = params.NF2
+        nlen = data.NLongest
+        nlen1 = nlen - p.k1 + 1
+        nlen2 = nlen1 - p.k2 + 1
 
         ##
         ##  Filters & Weights
         ##
-        F1 = np.random.random((nf,d,k))
-        F2 = np.random.random((nf2, d2, k2))
-        W = np.random.random((Nout, 44))
+        ##  F1, F2, W, MF1, and MF2
+        ##
+        self.F1 = np.random.normal(
+        0, 0.1,
+        size = (p.n1, d, p.k1))
 
-        self.F1, self.F2 = F1, F2
+        self.F2 = np.random.normal(
+        0, 0.9,
+        size = (p.n2, p.n1, p.k2
+        ))
+        self.W = np.random.normal(
+        0, 0.5,
+        size = (Nout, (p.n2 * nlen2)
+        ))
 
+        self.MF1 = self.MakeMFMatrix(self.F1, nlen)
+        self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
+
+        #=-=-=-=-=- Correct 100% -=-=-=-=-=
+
+        """
+        for i in range(Npts):
+
+            x = vecX(X[:, i], d, nlen)
+
+            if i == 0:
+                X_vectorized = x
+            else:
+                X_vectorized = np.vstack((X_vectorized, x))
+            print(i)
+
+        np.save('X_vectorized.npy', X_vectorized)
+        """
+        X_vectorized = np.load('X_vectorized.npy').T
+        #print(X_vectorized.shape)
+
+        for i in range(epochs):
+            for j in range(round(Npts/n_batches)):
+
+                ind = BatchCreator(j, n_batches).astype(int)
+                XBatch = X_vectorized[:, ind]
+                YBatch = Y[:, ind]
+                X_MX = X[:, ind]
+
+                S1, S2, S, P = self.forward(XBatch)
+
+                dW, dF2, dF1 = self.backward(S1, S2, S, P, self.W, XBatch, YBatch, X_MX)
+
+                self.W -= dW.reshape(self.W.shape) * p.eta
+                self.F2 -= dF2.reshape(self.F2.shape) * p.eta
+                self.F1 -= dF1.reshape(self.F1.shape) * p.eta
+
+                self.MF1 = self.MakeMFMatrix(self.F1, nlen)
+                self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
+
+        S1, S2, S, P = self.forward(X_vectorized)
+
+        out = np.argmax(P, axis=0).reshape(-1,1)
+        print(np.argmax(P, axis=0)[:100])
+
+        print(y[:100])
+        print(1 - np.mean(np.where(y == out, 0, 1)))
+
+
+            #print(i)dW, dF2, dF1
+#    def backward(self, S1, S2, S, P, W, XBatch, YBatch):
+        """ Checker
+        S1 = MF @ self.vecX(X[:, 0])
+        S2 = MX @ self.vecF(F1)
+
+        print(np.all(S1==S2))
+        """
+
+        """
         for epoch in range(epochs):
 
             for j in range(round(Npts/n_batches)):
@@ -207,7 +244,7 @@ class ConvNet:
                 XBatch = x_input
                 YBatch = Y[:, ind]
                 MF1 = self.MakeMFMatrix(F1, self.nlen)
-                MF2 = self.MakeMFMatrix(F2, (self.nlen - params.widthF1 + 1))
+                MF2 = self.MakeMFMatrix(F2, (self.nlen - p.k1 + 1))
 
                 self.MF1, self.MF2 = MF1, MF2
 
@@ -215,20 +252,16 @@ class ConvNet:
 
                 dW, dF2, dF1 = self.backward(S1, S2, S, P, W, XBatch, YBatch)
 
-                F1 += dF1.reshape(F1.shape) *params.eta
-                F2 += dF2.reshape(F2.shape) *params.eta
-                W += dW.reshape(W.shape) *params.eta
+                F1 += dF1.reshape(F1.shape) *p.eta
+                F2 += dF2.reshape(F2.shape) *p.eta
+                W += dW.reshape(W.shape) *p.eta
 
             print(epoch)
-
-        for i in range(Npts):
-            if i == 0:
-                x_input = self.vecX(X[:, i])
-            else:
-                x_input = np.vstack((x_input, self.vecX(X[:, i])))
 
         _,_,_, P = self.forward(MF1, MF2, W, x_input)
 
         out = np.argmax(P, axis=0).reshape(-1,1)
+        print(out)
         print(1 - np.mean(np.where(y==out, 0, 1)))
         #        out = np.argmax(P, axis=0).reshape(-1,1)
+        """

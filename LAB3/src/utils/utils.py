@@ -3,13 +3,13 @@ import numpy as np
 
 class Params:
 
-	def __init__(self, NF1, NF2, widthF1, widthF2, eta, roh, epochs,n_batches):
+	def __init__(self, n1, n2, k1, k2, eta, roh, epochs, n_batches):
 
-		self.NF1 = NF1
-		self.NF2 = NF2
+		self.n1 = n1
+		self.n2 = n2
 
-		self.widthF1 = widthF1
-		self.widthF2 = widthF2
+		self.k1 = k1
+		self.k2 = k2
 
 		self.eta = eta
 		self.roh = roh
@@ -31,3 +31,25 @@ def BatchCreator(j, n_batches):
     j_end = j*n_batches + 1
     ind = np.arange(start= j_start, stop=j_end, step=1)
     return ind
+
+def vecX(x, d, nlen):
+    """
+        OBS: To classify x data points, they need to pass through this
+        vector-converter.
+    """
+    return x.reshape((d, nlen)).flatten(order = 'F')
+
+def vecF(F):
+    """
+        OBS: To classify with filter F, it need to be flattened
+        through this converter.
+    """
+    nf,_,_ = F.shape
+    for filter in range(nf):
+
+    	if filter == 0:
+    		F_flattened = F[filter].flatten(order = 'F')
+    	else:
+    		F_flattened = np.hstack((F_flattened, F[filter].flatten(order = 'F')))
+
+    return F_flattened
