@@ -73,11 +73,11 @@ class ConvNet:
 
         return MX
 
-    def forward(self, x_input):
+    def forward(self, x_input, MF1, MF2, W):
 
-        S1 = ReLU(self.MF1 @ x_input)
-        S2 = ReLU(self.MF2 @ S1)
-        S = self.W@S2
+        S1 = ReLU(MF1 @ x_input)
+        S2 = ReLU(MF2 @ S1)
+        S = W@S2
         P = softmax(S)
         return S1, S2, S, P
 
@@ -124,6 +124,18 @@ class ConvNet:
         return dW, dF2, dF1
 
 
+    def ComputeCost(self, X, Y, MF1, MF2, W):
+
+        _,_,_, P  = self.forward(X, MF1, MF2, W)
+
+        loss = np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P)))
+
+        return loss
+
+    def ComputeAccuracy(self, P, y):
+        out = np.argmax(P, axis=0).reshape(-1,1)
+        return 1 - np.mean(np.where(y==out, 0, 1))
+
     def fit(self, data, p):
 
         ##
@@ -157,15 +169,15 @@ class ConvNet:
         ##  F1, F2, W, MF1, and MF2
         ##
         self.F1 = np.random.normal(
-        0, 0.1,
+        0, 1/np.sqrt(d),
         size = (p.n1, d, p.k1))
 
         self.F2 = np.random.normal(
-        0, 0.9,
+        0, 1/np.sqrt(p.n1),
         size = (p.n2, p.n1, p.k2
         ))
         self.W = np.random.normal(
-        0, 0.5,
+        0, 1/np.sqrt(Nout),
         size = (Nout, (p.n2 * nlen2)
         ))
 
@@ -198,7 +210,7 @@ class ConvNet:
                 YBatch = Y[:, ind]
                 X_MX = X[:, ind]
 
-                S1, S2, S, P = self.forward(XBatch)
+                S1, S2, S, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
                 dW, dF2, dF1 = self.backward(S1, S2, S, P, self.W, XBatch, YBatch, X_MX)
 
@@ -208,16 +220,12 @@ class ConvNet:
 
                 self.MF1 = self.MakeMFMatrix(self.F1, nlen)
                 self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
-                
-            S1, S2, S, P = self.forward(X_vectorized)
-            print(np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P))))
-        S1, S2, S, P = self.forward(X_vectorized)
 
-        out = np.argmax(P, axis=0).reshape(-1,1)
-        print(np.argmax(P, axis=0)[:100])
+            loss = self.ComputeCost(X, Y, self.MF1, self.MF2, self.W)
+            print(loss)
 
-        print(y[:100])
-        print(1 - np.mean(np.where(y == out, 0, 1)))
+        S1, S2, S, P = self.forward(X_vectorized, self.MF1, self.MF2, self.W)
+        acc = self.ComputeAccuracy(P, y)
 
 
             #print(i)dW, dF2, dF1
