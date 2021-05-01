@@ -100,7 +100,7 @@ class ConvNet:
         for j in range(Npts):
             g = G[:, j]
             x = S1[:, j]
-            mx = self.MakeMXMatrix(x, d, k, nf, 4, self.nlen - 5 + 1)
+            mx = self.MakeMXMatrix(x, d, k, nf, 10, self.nlen - 5 + 1)
             v = g.T @ mx
             dF2 += v
         dF2 *= (1/Npts)
@@ -134,6 +134,7 @@ class ConvNet:
 
     def ComputeAccuracy(self, P, y):
         out = np.argmax(P, axis=0).reshape(-1,1)
+        np.savetxt('out.txt', out)
         return 1 - np.mean(np.where(y==out, 0, 1))
 
     def fit(self, data, p):
@@ -141,9 +142,9 @@ class ConvNet:
         ##
         ##  Data
         ##
-        X = data.X
-        Y = data.Y
-        y = data.y - 1
+        X = data.X[:,:5000]
+        Y = data.Y[:,:5000]
+        y = data.y[:5000] - 1
 
         ##
         ##  Parameters
@@ -185,7 +186,7 @@ class ConvNet:
         self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
 
         #=-=-=-=-=- Correct 100% -=-=-=-=-=
-
+        print(Npts)
         """
         for i in range(Npts):
 
@@ -220,13 +221,16 @@ class ConvNet:
 
                 self.MF1 = self.MakeMFMatrix(self.F1, nlen)
                 self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
+                print(j)
 
             loss = self.ComputeCost(X, Y, self.MF1, self.MF2, self.W)
-            print(loss)
+            print('epoch: ', i)
+            print('loss: ',loss)
+            print('\n')
 
         S1, S2, S, P = self.forward(X_vectorized, self.MF1, self.MF2, self.W)
         acc = self.ComputeAccuracy(P, y)
-
+        print(acc)
 
             #print(i)dW, dF2, dF1
 #    def backward(self, S1, S2, S, P, W, XBatch, YBatch):
