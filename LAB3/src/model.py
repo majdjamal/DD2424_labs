@@ -208,7 +208,9 @@ class ConvNet:
 
                 self.MF1 = self.MakeMFMatrix(self.F1, nlen)
                 self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
-
+                
+            S1, S2, S, P = self.forward(X_vectorized)
+            print(np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P))))
         S1, S2, S, P = self.forward(X_vectorized)
 
         out = np.argmax(P, axis=0).reshape(-1,1)
