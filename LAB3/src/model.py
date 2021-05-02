@@ -17,6 +17,8 @@ class ConvNet:
         self.MF1 = None
         self.MF2 = None
 
+        self.counts = None
+
     def MakeMFMatrix(self, F, nlen):
 
     	nf,d,k = F.shape
@@ -48,7 +50,7 @@ class ConvNet:
 
     def MakeMXMatrix(self, x_input, d, k, nf, dx, nlen):
 
-        x_input = x_input.reshape((dx, nlen))
+        x_input = x_input.reshape((dx, nlen), order='F')
 
         I_nf = np.identity(nf)
 
@@ -74,6 +76,7 @@ class ConvNet:
         return MX
 
     def forward(self, x_input, MF1, MF2, W):
+        # =-=-=- All Correct -=-=-= 100 %
 
         S1 = ReLU(MF1 @ x_input)
         S2 = ReLU(MF2 @ S1)
@@ -81,19 +84,32 @@ class ConvNet:
         P = softmax(S)
         return S1, S2, S, P
 
-    def backward(self, S1, S2, S, P, W, XBatch, YBatch, X_MX):
+    def backward(self, S1, S2, S, P, W, XBatch, YBatch):
 
         _, Npts = P.shape
-        #Npts = 1
 
         G = - (YBatch - P)
 
-        dW = G @ S2.T * (1/Npts)
+        #dW = G @ S2.T * (1/Npts)
+        #dW1 = dW
+
+        for j in range(Npts):
+            g = G[:, j].reshape(-1, 1)
+            s2 = S2[:, j].reshape(-1, 1)
+            y = YBatch[:, j].argmax()
+
+            py = (1/self.counts[y]) * (1/18)
+
+            if j == 0:
+                dW = g@s2.T * py
+            else:
+                dW += g@s2.T * py
+
+        # =-=-=- ^ Correct -=-=-= 100 %
 
         G = W.T @ G
         G = G * np.where(S2 > 0, 1, 0)
 
-        #MakeMXMatrix(self, x_input, d, k, nf):
         nf,d,k = self.F2.shape
 
         dF2 = 0
@@ -102,8 +118,11 @@ class ConvNet:
             x = S1[:, j]
             mx = self.MakeMXMatrix(x, d, k, nf, 4, self.nlen - 5 + 1)
             v = g.T @ mx
-            dF2 += v
-        dF2 *= (1/Npts)
+            y = YBatch[:, j].argmax()
+
+            py = (1/self.counts[y]) * (1/18)
+
+            dF2 += v * py
 
         G = self.MF2.T @ G
         G = G * np.where(S1 > 0, 1, 0)
@@ -114,27 +133,159 @@ class ConvNet:
         dF1 = 0
         for j in range(Npts):
             g = G[:, j]
-            x = X_MX[:, j]
+            x = XBatch[:, j]
             mx = self.MakeMXMatrix(x, d, k, nf, self.dx, self.nlen)
             v = g.T @ mx
-            dF1 += v
+            y = YBatch[:, j].argmax()
 
-        dF1 *= (1/Npts)
+            py = (1/self.counts[y]) * (1/18)
+
+            dF1 += v * py
 
         return dW, dF2, dF1
 
+    def update(self, dW, dF2, dF1, eta):
+
+        self.W -= dW.reshape(self.W.shape) * eta
+        self.F2 -= dF2.reshape(self.F2.shape) * eta
+        self.F1 -= dF1.reshape(self.F1.shape) * eta
 
     def ComputeCost(self, X, Y, MF1, MF2, W):
 
         _,_,_, P  = self.forward(X, MF1, MF2, W)
+        _, Npts = P.shape
 
-        loss = np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P)))
+        #loss = np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P)))
+        #loss = np.mean(-np.log(np.diag(Y.T @ P)))
+
+        loss = 0
+
+        for j in range(Npts):
+
+            y = Y[:, j]
+            p = P[:, j]
+            ind = y.argmax()
+            py = (1/self.counts[ind]) * (1/18)
+            loss -= np.log(y.T @ p) * py
 
         return loss
 
     def ComputeAccuracy(self, P, y):
         out = np.argmax(P, axis=0).reshape(-1,1)
+        np.savetxt('out.txt', out)
         return 1 - np.mean(np.where(y==out, 0, 1))
+
+
+    def ComputeGradsNumSlow(self, X, Y, W, F2, F1, h):
+
+        MF2 = self.MakeMFMatrix(F2, 15)
+        MF1 = self.MakeMFMatrix(F1, 19)
+
+        grad_W1 = np.zeros(W.shape)
+        for i in range(W.shape[0]):
+            for j in range(W.shape[1]):
+                W1_try = np.array(W)
+                W1_try[i,j] -= h
+                c1 = self.ComputeCost(X, Y, MF1, MF2, W1_try)
+
+                W1_try = np.array(W)
+                W1_try[i,j] += h
+                c2 = self.ComputeCost(X, Y, MF1, MF2, W1_try)
+
+                #print((c2 - c1) / (2 * h))
+
+                grad_W1[i,j] = (c2 - c1) / (2 * h)
+
+        grad_F2 = np.zeros(F2.shape)
+        for k in range(F2.shape[0]):
+            for i in range(F2.shape[1]):
+                for j in range(F2.shape[2]):
+
+                    F2_try = np.array(F2)
+                    F2_try[k, i, j] -= h
+                    MF2_try = self.MakeMFMatrix(F2_try, 15)
+                    c1 = self.ComputeCost(X, Y, MF1, MF2_try, W)
+
+                    F2_try = np.array(F2)
+                    F2_try[k, i, j] += h
+                    MF2_try = self.MakeMFMatrix(F2_try, 15)
+                    c2 = self.ComputeCost(X, Y, MF1, MF2_try, W)
+
+
+                    grad_F2[k, i, j] = (c2 - c1) / (2 * h)
+
+        grad_F1 = np.zeros(F1.shape)
+        for k in range(F1.shape[0]):
+            for i in range(F1.shape[1]):
+                for j in range(F1.shape[2]):
+
+                    F1_try = np.array(F1)
+                    F1_try[k, i, j] -= h
+                    MF1_try = self.MakeMFMatrix(F1_try, 19)
+                    c1 = self.ComputeCost(X, Y, MF1_try, MF2, W)
+
+                    F1_try = np.array(F1)
+                    F1_try[k, i, j] += h
+                    MF1_try = self.MakeMFMatrix(F1_try, 19)
+                    c2 = self.ComputeCost(X, Y, MF1_try, MF2, W)
+
+                    #print((c2 - c1) / (2 * h))
+                    grad_F1[k, i, j] = (c2 - c1) / (2 * h)
+
+        return grad_W1, grad_F2, grad_F1
+
+
+    def TestMFandMX(self):
+
+        X_test = np.arange(1*6*4) + 1
+        X_test = X_test.reshape(1,6,4)
+        #print(X_test)
+        X_input = X_test.flatten(order = 'F')
+        #print(X_input)
+
+        F_test = np.arange(4*6*3) + 1
+        F_test = F_test.reshape(4,6,3)
+        #print(F_test)
+
+        nf,d,k = F_test.shape
+
+        MF_test = self.MakeMFMatrix(F_test, 4)
+        #print(MF_test)
+
+        MX_test = self.MakeMXMatrix(X_input, d, k, nf, 6, 4)
+
+
+        s1 = MF_test @X_input
+        s2 = MX_test @ vecF(F_test)
+        print(np.all(s1 == s2)) # >>> True
+
+    def AnalyzeGradients(self, X, Y):
+
+        XBatch = X[:, :100]
+        YBatch = Y[:, :100]
+
+        S1, S2, S, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
+
+        grad_an, grad_an_F2, grad_an_F1 = self.backward(S1, S2, S, P, self.W, XBatch, YBatch)
+        grad_num, grad_num_F2, grad_num_F1 = self.ComputeGradsNumSlow(XBatch, YBatch, self.W, self.F2, self.F1, 1e-5)
+
+        grad_an_F1 = grad_an_F1.reshape(self.F1.shape)
+        grad_an_F2 = grad_an_F2.reshape(self.F2.shape)
+
+        #print(grad_an_F1)
+        diff = np.sum(np.abs(np.subtract(grad_an, grad_num)))
+        diff /= np.sum(np.add(np.abs(grad_an), np.abs(grad_num)))
+        print('W: ', diff)
+
+
+        diff = np.sum(np.abs(np.subtract(grad_an_F2, grad_num_F2)))
+        diff /= np.sum(np.add(np.abs(grad_an_F2), np.abs(grad_num_F2)))
+        print('F2: ',diff)
+
+        diff = np.sum(np.abs(np.subtract(grad_an_F1, grad_num_F1)))
+        diff /= np.sum(np.add(np.abs(grad_an_F1), np.abs(grad_num_F1)))
+        print('F1: ',diff)
+
 
     def fit(self, data, p):
 
@@ -145,12 +296,21 @@ class ConvNet:
         Y = data.Y
         y = data.y - 1
 
+        X_train = data.X_train
+        Y_train = data.Y_train
+        y_train = data.y_train - 1
+
+        X_val = data.X_val
+        Y_val = data.Y_val
+        y_val = data.y_val - 1
+
+
         ##
         ##  Parameters
         ##
 
         #General
-        Ndim, Npts = X.shape
+        Ndim, Npts = X_train.shape
         self.dx, self.nlen = data.NUnique, data.NLongest
         Nout, _ = Y.shape
         epochs = p.epochs
@@ -168,6 +328,7 @@ class ConvNet:
         ##
         ##  F1, F2, W, MF1, and MF2
         ##
+
         self.F1 = np.random.normal(
         0, 1/np.sqrt(d),
         size = (p.n1, d, p.k1))
@@ -181,93 +342,61 @@ class ConvNet:
         size = (Nout, (p.n2 * nlen2)
         ))
 
+        #self.F2 = np.random.randn((p.n2, p.n1, p.k2), p.n2*p.n1*p.k2*np.sqrt(2/(p.n2*p.n1*p.k2 * nlen2+p.n1*d*p.k1)))
+        #self.F1 = np.random.randn((p.n1, d, p.k1), Nout*p.n2 * nlen2*np.sqrt(2/(Nout*p.n2 * nlen2+p.n1*d*p.k1)))
+        #self.W = np.random.randn((Nout, (p.n2 * nlen2),1*np.sqrt(2/(Nout*p.n2 * nlen2))))
+        #print(self.F2.shape)
+        #print(self.F1.shape)
+        #print(self.W.shape)
+
         self.MF1 = self.MakeMFMatrix(self.F1, nlen)
         self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
-
+        _, self.counts = np.unique(y, return_counts = True)
+        #print(unique, counts)
         #=-=-=-=-=- Correct 100% -=-=-=-=-=
+        # nlen1 = 15
+        #print(nlen)
 
-        """
-        for i in range(Npts):
+        #self.CheckMImplementations(self.MF1, self.F1, X[:, 0])
 
-            x = vecX(X[:, i], d, nlen)
+        #self.TestMFandMX()
+        self.AnalyzeGradients(X, Y)
 
-            if i == 0:
-                X_vectorized = x
-            else:
-                X_vectorized = np.vstack((X_vectorized, x))
-            print(i)
-
-        np.save('X_vectorized.npy', X_vectorized)
-        """
-        X_vectorized = np.load('X_vectorized.npy').T
-        #print(X_vectorized.shape)
-
+        """ Training
+        print('=-=- Starting Training -=-=')
         for i in range(epochs):
             for j in range(round(Npts/n_batches)):
 
                 ind = BatchCreator(j, n_batches).astype(int)
-                XBatch = X_vectorized[:, ind]
-                YBatch = Y[:, ind]
-                X_MX = X[:, ind]
-
-                S1, S2, S, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
-
-                dW, dF2, dF1 = self.backward(S1, S2, S, P, self.W, XBatch, YBatch, X_MX)
-
-                self.W -= dW.reshape(self.W.shape) * p.eta
-                self.F2 -= dF2.reshape(self.F2.shape) * p.eta
-                self.F1 -= dF1.reshape(self.F1.shape) * p.eta
-
+                XBatch = X_train[:, ind]
+                YBatch = Y_train[:, ind]
                 self.MF1 = self.MakeMFMatrix(self.F1, nlen)
                 self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
 
-            loss = self.ComputeCost(X, Y, self.MF1, self.MF2, self.W)
-            print(loss)
+                S1, S2, S, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
-        S1, S2, S, P = self.forward(X_vectorized, self.MF1, self.MF2, self.W)
-        acc = self.ComputeAccuracy(P, y)
+                gradients= self.backward(S1, S2, S, P, self.W, XBatch, YBatch)
 
+                self.update(*gradients, p.eta)
+
+                    #X, Y, MF1, MF2, W):
+            loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W)
+            print('loss: ', loss)
+            print('Epoch: ', i)
+            print('\n')
+
+
+        print('=-=- Training Completed -=-=')
+
+        S1, S2, S, P = self.forward(X_val, self.MF1, self.MF2, self.W)
+        acc = self.ComputeAccuracy(P, y_val)
+        print('Accuracy: ', acc)
+        #"""
 
             #print(i)dW, dF2, dF1
 #    def backward(self, S1, S2, S, P, W, XBatch, YBatch):
-        """ Checker
-        S1 = MF @ self.vecX(X[:, 0])
-        S2 = MX @ self.vecF(F1)
-
-        print(np.all(S1==S2))
-        """
 
         """
-        for epoch in range(epochs):
-
-            for j in range(round(Npts/n_batches)):
-
-                ind = BatchCreator(j, n_batches).astype(int)
-                mini_batch = X[:, ind]
-
-                for i in range(mini_batch.shape[1]):
-                    if i == 0:
-                        x_input = self.vecX(mini_batch[:, i])
-                    else:
-                        x_input = np.vstack((x_input, self.vecX(mini_batch[:, i])))
-
-                XBatch = x_input
-                YBatch = Y[:, ind]
-                MF1 = self.MakeMFMatrix(F1, self.nlen)
-                MF2 = self.MakeMFMatrix(F2, (self.nlen - p.k1 + 1))
-
-                self.MF1, self.MF2 = MF1, MF2
-
-                S1, S2, S, P = self.forward(MF1, MF2, W, XBatch)
-
-                dW, dF2, dF1 = self.backward(S1, S2, S, P, W, XBatch, YBatch)
-
-                F1 += dF1.reshape(F1.shape) *p.eta
-                F2 += dF2.reshape(F2.shape) *p.eta
-                W += dW.reshape(W.shape) *p.eta
-
-            print(epoch)
-
         _,_,_, P = self.forward(MF1, MF2, W, x_input)
 
         out = np.argmax(P, axis=0).reshape(-1,1)
