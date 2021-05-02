@@ -261,8 +261,8 @@ class ConvNet:
 
     def AnalyzeGradients(self, X, Y):
 
-        XBatch = X[:, :100]
-        YBatch = Y[:, :100]
+        XBatch = X[:, :5]
+        YBatch = Y[:, :5]
 
         S1, S2, S, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
