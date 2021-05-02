@@ -296,9 +296,9 @@ class ConvNet:
         ##
         ##  Data
         ##
-        X = data.X[:,:5000]
-        Y = data.Y[:,:5000]
-        y = data.y[:5000] - 1
+        X = data.X
+        Y = data.Y
+        y = data.y - 1
 
         X_train = data.X_train
         Y_train = data.Y_train
@@ -334,15 +334,15 @@ class ConvNet:
         ##
 
         self.F1 = np.random.normal(
-        0, 1/np.sqrt(d),
+        0, 1/np.sqrt(d*nlen),
         size = (p.n1, d, p.k1))
 
         self.F2 = np.random.normal(
-        0, 1/np.sqrt(p.n1),
+        0, 1/np.sqrt(p.n1*nlen1),
         size = (p.n2, p.n1, p.k2
         ))
         self.W = np.random.normal(
-        0, 1/np.sqrt(Nout),
+        0, 1/np.sqrt(Nout*nlen2),
         size = (Nout, (p.n2 * nlen2)
         ))
 
@@ -365,7 +365,7 @@ class ConvNet:
 
 
         #self.TestMFandMX()
-        self.AnalyzeGradients(X, Y)
+        #self.AnalyzeGradients(X, Y)
 
         """ Training
         print('=-=- Starting Training -=-=')
@@ -385,8 +385,8 @@ class ConvNet:
                 self.update(*gradients, p.eta)
 
                     #X, Y, MF1, MF2, W):
-            loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W)
-            print('loss: ', loss)
+            #loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W)
+            #print('loss: ', loss)
             print('Epoch: ', i)
             print('\n')
 
