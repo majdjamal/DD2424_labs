@@ -119,7 +119,9 @@ class ConvNet:
             mx = self.MakeMXMatrix(x, d, k, nf, 10, self.nlen - 5 + 1)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
-
+            #s1 = mx @ vecF(self.F2)    #Check
+            #s2 = self.MF2 @ x
+            #print(np.all(s1==s2))
             py = (1/self.counts[y]) * (1/18)
 
             dF2 += v * py
@@ -137,7 +139,9 @@ class ConvNet:
             mx = self.MakeMXMatrix(x, d, k, nf, self.dx, self.nlen)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
-
+            #s1 = mx @ vecF(self.F1)    #Check
+            #s2 = self.MF1 @ x
+            #print(np.all(s1==s2))
             py = (1/self.counts[y]) * (1/18)
 
             dF1 += v * py
