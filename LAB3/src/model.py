@@ -117,8 +117,8 @@ class ConvNet:
 
         dF2 = 0
         for j in range(Npts):
-            g = G[:, j]
-            x = S1[:, j]
+            g = G[:, j].reshape(-1, 1)
+            x = S1[:, j].reshape(-1, 1)
             mx = self.MakeMXMatrix(x, d, k, nf, nf, self.nlen1)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
@@ -137,8 +137,8 @@ class ConvNet:
 
         dF1 = 0
         for j in range(Npts):
-            g = G[:, j]
-            x = XBatch[:, j]
+            g = G[:, j].reshape(-1, 1)
+            x = XBatch[:, j].reshape(-1, 1)
             mx = self.MakeMXMatrix(x, d, k, nf, self.dx, self.nlen)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
@@ -182,7 +182,6 @@ class ConvNet:
 
     def ComputeAccuracy(self, P, y):
         out = np.argmax(P, axis=0).reshape(-1,1)
-        np.savetxt('out.txt', out)
         return 1 - np.mean(np.where(y==out, 0, 1))
 
     def ComputeGradsNumSlow(self, X, Y, W, F2, F1, h):
@@ -219,7 +218,6 @@ class ConvNet:
                     F2_try[k, i, j] += h
                     MF2_try = self.MakeMFMatrix(F2_try, self.nlen1)
                     c2 = self.ComputeCost(X, Y, MF1, MF2_try, W, F1, F2)
-
 
                     grad_F2[k, i, j] = (c2 - c1) / (2 * h)
 
@@ -276,6 +274,38 @@ class ConvNet:
         #nf, d, k = self.F1.shape
         #mx = self.MakeMXMatrix(xoriginal_flatten, d, k, nf, self.dx, self.nlen)
         #print(mx[0, : 500])
+
+    def debug(self):
+
+        import scipy.io
+        d = scipy.io.loadmat('DebugInfo.mat')
+
+        debug_x = d['x_input']
+        debug_F = d['F']
+        debug_vecF = d['vecF']
+        debug_vecS = d['vecS']
+        debug_S = d['S']
+        debug_X = d['X_input']
+
+        dx, nlen = debug_X.shape
+        #print(debug_F.shape)
+        debug_F = debug_F.transpose([2,0,1])
+        nf, d, k = debug_F.shape
+
+        MF = self.MakeMFMatrix(debug_F, nlen)
+        S1 = MF @ debug_x
+
+        print(S1[:, 0] == debug_vecS[:, 0])
+
+        MX = self.MakeMXMatrix(debug_x, d, k, nf, dx, nlen)
+        S2 = MX @debug_vecF
+        print(S2[:, 0] == debug_vecS[:, 0])
+
+        #vF = vecF(debug_F)
+        #print(vF)
+        #print(debug_vecF)
+        #print(np.all(debug_vecF[:, 0] == vF))
+        #print(F_reshape.shape)
 
 
     def AnalyzeGradients(self, X, Y):
@@ -350,24 +380,13 @@ class ConvNet:
 
         ##
         ##  Filters & Weights
-        ##
+        ##  source: https://towardsdatascience.com/weight-initialization-techniques-in-neural-networks-26c649eb3b78
         ##  F1, F2, W, MF1, and MF2
         ##
+        self.F1 = np.random.randn(p.n1, d, p.k1) * np.sqrt(d)
+        self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/self.F1.size)
+        self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/self.F2.size)
 
-        self.F1 = np.random.normal(
-        0, 1/np.sqrt(d),
-        size = (p.n1, d, p.k1))
-
-        self.F2 = np.random.normal(
-        0, 1/np.sqrt(p.n1),
-        size = (p.n2, p.n1, p.k2
-        ))
-        self.W = np.random.normal(
-        0, 1/np.sqrt(Nout*nlen2),
-        size = (Nout, (p.n2 * nlen2)
-        ))
-
-        #self.F2 = np.random.randn((p.n2, p.n1, p.k2), p.n2*p.n1*p.k2*np.sqrt(2/(p.n2*p.n1*p.k2 * nlen2+p.n1*d*p.k1)))
         #self.F1 = np.random.randn((p.n1, d, p.k1), Nout*p.n2 * nlen2*np.sqrt(2/(Nout*p.n2 * nlen2+p.n1*d*p.k1)))
         #self.W = np.random.randn((Nout, (p.n2 * nlen2),1*np.sqrt(2/(Nout*p.n2 * nlen2))))
         #print(self.F2.shape)
@@ -382,9 +401,9 @@ class ConvNet:
         # nlen1 = 15
         #print(nlen)
 
-
         #self.TestMFandMX()
-        #self.AnalyzeGradients(X, Y)
+        #self.debug()
+        #self.AnalyzeGradients(X_train, Y_train)
 
         #""" Training
         print('=-=- Starting Training -=-=')
@@ -403,12 +422,11 @@ class ConvNet:
 
                 self.update(*gradients, p.eta)
 
-                    #X, Y, MF1, MF2, W):
-            loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
-            print('loss: ', loss)
+                #X, Y, MF1, MF2, W):
+                loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
+                print('loss: ', loss)
             print('Epoch: ', i)
             print('\n')
-
 
         print('=-=- Training Completed -=-=')
 
