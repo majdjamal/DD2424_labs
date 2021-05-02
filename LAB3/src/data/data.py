@@ -69,6 +69,12 @@ for i in range(Npts):
 
         name2vec[ind][j] = 1
 
+    if i == 0:
+        xoriginal = name2vec
+        xoriginal_flatten = name2vec.flatten(order = 'F')
+        np.save('xoriginal.npy', xoriginal)
+        np.save('xoriginal_flatten.npy', xoriginal_flatten)
+        
     names2matrix[:, i] = name2vec.flatten(order = 'F')
 
 

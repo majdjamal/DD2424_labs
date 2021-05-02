@@ -19,6 +19,9 @@ class ConvNet:
 
         self.counts = None
 
+        self.nlen = None
+        self.nlen1 = None
+
     def MakeMFMatrix(self, F, nlen):
 
     	nf,d,k = F.shape
@@ -116,7 +119,7 @@ class ConvNet:
         for j in range(Npts):
             g = G[:, j]
             x = S1[:, j]
-            mx = self.MakeMXMatrix(x, d, k, nf, 10, self.nlen - 5 + 1)
+            mx = self.MakeMXMatrix(x, d, k, nf, nf, self.nlen1)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
             #s1 = mx @ vecF(self.F2)    #Check
@@ -150,11 +153,11 @@ class ConvNet:
 
     def update(self, dW, dF2, dF1, eta):
 
-        self.W -= dW.reshape(self.W.shape) * eta
+        self.W -= dW * eta
         self.F2 -= dF2.reshape(self.F2.shape) * eta
         self.F1 -= dF1.reshape(self.F1.shape) * eta
 
-    def ComputeCost(self, X, Y, MF1, MF2, W):
+    def ComputeCost(self, X, Y, MF1, MF2, W, F1, F2):
 
         _,_,_, P  = self.forward(X, MF1, MF2, W)
         _, Npts = P.shape
@@ -163,6 +166,7 @@ class ConvNet:
         #loss = np.mean(-np.log(np.diag(Y.T @ P)))
 
         loss = 0
+        lmd = 0.001
 
         for j in range(Npts):
 
@@ -172,29 +176,30 @@ class ConvNet:
             py = (1/self.counts[ind]) * (1/18)
             loss -= np.log(y.T @ p) * py
 
-        return loss
+        #reg = lmd * (np.sum(np.square(W)) + np.sum(np.square(F1)) + np.sum(np.square(F2)))
+
+        return loss #+ reg
 
     def ComputeAccuracy(self, P, y):
         out = np.argmax(P, axis=0).reshape(-1,1)
         np.savetxt('out.txt', out)
         return 1 - np.mean(np.where(y==out, 0, 1))
 
-
     def ComputeGradsNumSlow(self, X, Y, W, F2, F1, h):
 
-        MF2 = self.MakeMFMatrix(F2, 15)
-        MF1 = self.MakeMFMatrix(F1, 19)
+        MF2 = self.MakeMFMatrix(F2, self.nlen1)
+        MF1 = self.MakeMFMatrix(F1, self.nlen)
 
         grad_W1 = np.zeros(W.shape)
         for i in range(W.shape[0]):
             for j in range(W.shape[1]):
                 W1_try = np.array(W)
                 W1_try[i,j] -= h
-                c1 = self.ComputeCost(X, Y, MF1, MF2, W1_try)
+                c1 = self.ComputeCost(X, Y, MF1, MF2, W1_try, F1, F2)
 
                 W1_try = np.array(W)
                 W1_try[i,j] += h
-                c2 = self.ComputeCost(X, Y, MF1, MF2, W1_try)
+                c2 = self.ComputeCost(X, Y, MF1, MF2, W1_try, F1, F2)
 
                 #print((c2 - c1) / (2 * h))
 
@@ -207,13 +212,13 @@ class ConvNet:
 
                     F2_try = np.array(F2)
                     F2_try[k, i, j] -= h
-                    MF2_try = self.MakeMFMatrix(F2_try, 15)
-                    c1 = self.ComputeCost(X, Y, MF1, MF2_try, W)
+                    MF2_try = self.MakeMFMatrix(F2_try, self.nlen1)
+                    c1 = self.ComputeCost(X, Y, MF1, MF2_try, W, F1, F2)
 
                     F2_try = np.array(F2)
                     F2_try[k, i, j] += h
-                    MF2_try = self.MakeMFMatrix(F2_try, 15)
-                    c2 = self.ComputeCost(X, Y, MF1, MF2_try, W)
+                    MF2_try = self.MakeMFMatrix(F2_try, self.nlen1)
+                    c2 = self.ComputeCost(X, Y, MF1, MF2_try, W, F1, F2)
 
 
                     grad_F2[k, i, j] = (c2 - c1) / (2 * h)
@@ -225,13 +230,13 @@ class ConvNet:
 
                     F1_try = np.array(F1)
                     F1_try[k, i, j] -= h
-                    MF1_try = self.MakeMFMatrix(F1_try, 19)
-                    c1 = self.ComputeCost(X, Y, MF1_try, MF2, W)
+                    MF1_try = self.MakeMFMatrix(F1_try, self.nlen)
+                    c1 = self.ComputeCost(X, Y, MF1_try, MF2, W, F1, F2)
 
                     F1_try = np.array(F1)
                     F1_try[k, i, j] += h
-                    MF1_try = self.MakeMFMatrix(F1_try, 19)
-                    c2 = self.ComputeCost(X, Y, MF1_try, MF2, W)
+                    MF1_try = self.MakeMFMatrix(F1_try, self.nlen)
+                    c2 = self.ComputeCost(X, Y, MF1_try, MF2, W, F1, F2)
 
                     #print((c2 - c1) / (2 * h))
                     grad_F1[k, i, j] = (c2 - c1) / (2 * h)
@@ -257,11 +262,21 @@ class ConvNet:
         #print(MF_test)
 
         MX_test = self.MakeMXMatrix(X_input, d, k, nf, 6, 4)
-
+        #print(MX_test)
 
         s1 = MF_test @X_input
         s2 = MX_test @ vecF(F_test)
         print(np.all(s1 == s2)) # >>> True
+
+
+        #xoriginal = np.load('xoriginal.npy')
+        #xoriginal_flatten = np.load('xoriginal_flatten.npy')
+
+        #print(xoriginal_flatten)
+        #nf, d, k = self.F1.shape
+        #mx = self.MakeMXMatrix(xoriginal_flatten, d, k, nf, self.dx, self.nlen)
+        #print(mx[0, : 500])
+
 
     def AnalyzeGradients(self, X, Y):
 
@@ -273,6 +288,9 @@ class ConvNet:
         grad_an, grad_an_F2, grad_an_F1 = self.backward(S1, S2, S, P, self.W, XBatch, YBatch)
         grad_num, grad_num_F2, grad_num_F1 = self.ComputeGradsNumSlow(XBatch, YBatch, self.W, self.F2, self.F1, 1e-5)
 
+        #print(grad_num_F2)
+        #print('\n'*3)
+        #print(grad_an_F2.reshape(self.F2.shape))
         grad_an_F1 = grad_an_F1.reshape(self.F1.shape)
         grad_an_F2 = grad_an_F2.reshape(self.F2.shape)
 
@@ -281,9 +299,9 @@ class ConvNet:
         diff /= np.sum(np.add(np.abs(grad_an), np.abs(grad_num)))
         print('W: ', diff)
 
-
-        diff = np.sum(np.abs(np.subtract(grad_an_F2, grad_num_F2)))
-        diff /= np.sum(np.add(np.abs(grad_an_F2), np.abs(grad_num_F2)))
+        #print(np.abs(grad_an_F2 - grad_num_F2))
+        diff = np.sum(np.abs(grad_an_F2 - grad_num_F2))
+        diff /= np.sum(np.abs(grad_an_F2) + np.abs(grad_num_F2))
         print('F2: ',diff)
 
         diff = np.sum(np.abs(np.subtract(grad_an_F1, grad_num_F1)))
@@ -327,6 +345,9 @@ class ConvNet:
         nlen1 = nlen - p.k1 + 1
         nlen2 = nlen1 - p.k2 + 1
 
+        self.nlen = nlen
+        self.nlen1 = nlen1
+
         ##
         ##  Filters & Weights
         ##
@@ -334,11 +355,11 @@ class ConvNet:
         ##
 
         self.F1 = np.random.normal(
-        0, 1/np.sqrt(d*nlen),
+        0, 1/np.sqrt(d),
         size = (p.n1, d, p.k1))
 
         self.F2 = np.random.normal(
-        0, 1/np.sqrt(p.n1*nlen1),
+        0, 1/np.sqrt(p.n1),
         size = (p.n2, p.n1, p.k2
         ))
         self.W = np.random.normal(
@@ -355,19 +376,17 @@ class ConvNet:
 
         self.MF1 = self.MakeMFMatrix(self.F1, nlen)
         self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
-        _, self.counts = np.unique(y, return_counts = True)
+        _, self.counts = np.unique(y_train, return_counts = True)
         #print(unique, counts)
         #=-=-=-=-=- Correct 100% -=-=-=-=-=
         # nlen1 = 15
         #print(nlen)
 
-        #self.CheckMImplementations(self.MF1, self.F1, X[:, 0])
-
 
         #self.TestMFandMX()
         #self.AnalyzeGradients(X, Y)
 
-        """ Training
+        #""" Training
         print('=-=- Starting Training -=-=')
         for i in range(epochs):
             for j in range(round(Npts/n_batches)):
@@ -385,8 +404,8 @@ class ConvNet:
                 self.update(*gradients, p.eta)
 
                     #X, Y, MF1, MF2, W):
-            #loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W)
-            #print('loss: ', loss)
+            loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
+            print('loss: ', loss)
             print('Epoch: ', i)
             print('\n')
 
