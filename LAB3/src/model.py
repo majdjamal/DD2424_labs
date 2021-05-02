@@ -116,7 +116,7 @@ class ConvNet:
         for j in range(Npts):
             g = G[:, j]
             x = S1[:, j]
-            mx = self.MakeMXMatrix(x, d, k, nf, 4, self.nlen - 5 + 1)
+            mx = self.MakeMXMatrix(x, d, k, nf, 10, self.nlen - 5 + 1)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
 
@@ -292,9 +292,9 @@ class ConvNet:
         ##
         ##  Data
         ##
-        X = data.X
-        Y = data.Y
-        y = data.y - 1
+        X = data.X[:,:5000]
+        Y = data.Y[:,:5000]
+        y = data.y[:5000] - 1
 
         X_train = data.X_train
         Y_train = data.Y_train
@@ -358,6 +358,7 @@ class ConvNet:
         #print(nlen)
 
         #self.CheckMImplementations(self.MF1, self.F1, X[:, 0])
+
 
         #self.TestMFandMX()
         self.AnalyzeGradients(X, Y)
