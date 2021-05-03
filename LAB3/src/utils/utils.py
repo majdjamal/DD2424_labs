@@ -62,4 +62,5 @@ def plotter(X, Y):
 	plt.ylabel('loss')
 	plt.plot(X, Y, color = 'red', label = 'loss')
 	plt.legend()
-	plt.show()
+	plt.savefig('result/loss')
+	plt.close()

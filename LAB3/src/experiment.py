@@ -18,7 +18,7 @@ cnn = ConvNet()
 cnn.fit(data, params)
 
 loss_ind, loss = cnn.getLoss()
-#plotter(loss_ind, loss)
+plotter(loss_ind, loss)
 
 
 end = time.time()

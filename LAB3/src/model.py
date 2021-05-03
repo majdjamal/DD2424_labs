@@ -324,7 +324,7 @@ class ConvNet:
         can reproduce vectors from DebugInfo.mat.
         """
         import scipy.io
-        d = scipy.io.loadmat('DebugInfo.mat')
+        d = scipy.io.loadmat('utils/DebugInfo.mat')
 
         debug_x = d['x_input']
         debug_F = d['F']
@@ -385,8 +385,9 @@ class ConvNet:
     def getLoss(self):
         return self.losses
 
-    def MakeConfusionMatrix(self, pred, true, Nout):
+    def MakeConfusionMatrix(self, P, true, Nout):
 
+        pred = np.argmax(P, axis=0).reshape(-1,1)
         CM = np.zeros((Nout, Nout))
         _, counts = np.unique(true, return_counts = True)
         for i in range(true.size):
@@ -403,6 +404,7 @@ class ConvNet:
         plt.xticks(np.arange(18), np.arange(1, 19))
         bar = plt.colorbar(im)
         plt.savefig('result/CM')
+        plt.close()
 
     def fit(self, data, p):
         """ This function is called to start trining.
@@ -464,9 +466,7 @@ class ConvNet:
         #self.debug()
         #self.AnalyzeGradients(X_train, Y_train)
 
-        pred = np.loadtxt('out.txt')
-        self.MakeConfusionMatrix(pred, y_val, Nout)
-        """ Training
+        #""" Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
 
         print('=-=- Starting Training -=-=')
@@ -501,9 +501,9 @@ class ConvNet:
         print('=-=- Training Completed -=-=')
 
         S1, S2, P = self.forward(X_val, self.MF1, self.MF2, self.W)
+        self.MakeConfusionMatrix(P, y_val, Nout)
         acc = self.ComputeAccuracy(P, y_val)
         print('Accuracy: ', acc)
-        print(y_val)
         #"""
 
     def predict(self, X):
