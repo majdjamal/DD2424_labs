@@ -383,7 +383,7 @@ class ConvNet:
         ##  source: https://towardsdatascience.com/weight-initialization-techniques-in-neural-networks-26c649eb3b78
         ##  F1, F2, W, MF1, and MF2
         ##
-        self.F1 = np.random.randn(p.n1, d, p.k1) * np.sqrt(d)
+        self.F1 = np.random.randn(p.n1, d, p.k1) * np.sqrt(1/d)
         self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/self.F1.size)
         self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/self.F2.size)
 
