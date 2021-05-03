@@ -154,8 +154,8 @@ class ConvNet:
     def update(self, dW, dF2, dF1, eta):
 
         self.W -= dW * eta
-        self.F2 -= dF2.reshape(self.F2.shape) * eta
-        self.F1 -= dF1.reshape(self.F1.shape) * eta
+        self.F2 -= dF2.reshape(self.F2.shape, order = 'F') * eta
+        self.F1 -= dF1.reshape(self.F1.shape, order = 'F') * eta
 
     def ComputeCost(self, X, Y, MF1, MF2, W, F1, F2):
 
@@ -404,7 +404,7 @@ class ConvNet:
         #self.TestMFandMX()
         #self.debug()
         #self.AnalyzeGradients(X_train, Y_train)
-
+        print(Npts/n_batches, ' update steps.')
         #""" Training
         print('=-=- Starting Training -=-=')
         for i in range(epochs):
@@ -423,8 +423,8 @@ class ConvNet:
                 self.update(*gradients, p.eta)
 
                 #X, Y, MF1, MF2, W):
-                loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
-                print('loss: ', loss)
+            loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
+            print('loss: ', loss)
             print('Epoch: ', i)
             print('\n')
 

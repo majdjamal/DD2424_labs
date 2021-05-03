@@ -9,7 +9,7 @@ start = time.time()
 
 data = getData()
 params = Params(
-    n1 = 20, n2  = 20,
+    n1 = 10, n2  = 10,
     k1 = 5, k2  = 5,
     eta  = 0.001, roh = 0.9,
     epochs = 50, n_batches = 130)
