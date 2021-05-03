@@ -1,6 +1,6 @@
 
 import numpy as np
-from utils.utils import softmax, ReLU, BatchCreator, vecX, vecF
+from utils.utils import ReLU, BatchCreator, vecX, vecF, softmax
 
 
 class ConvNet:
@@ -154,8 +154,8 @@ class ConvNet:
     def update(self, dW, dF2, dF1, eta):
 
         self.W -= dW * eta
-        self.F2 -= dF2.reshape(self.F2.shape, order = 'F') * eta
-        self.F1 -= dF1.reshape(self.F1.shape, order = 'F') * eta
+        self.F2 -= dF2.reshape(self.F2.shape) * eta
+        self.F1 -= dF1.reshape(self.F1.shape) * eta
 
     def ComputeCost(self, X, Y, MF1, MF2, W, F1, F2):
 
@@ -403,9 +403,9 @@ class ConvNet:
 
         #self.TestMFandMX()
         #self.debug()
-        #self.AnalyzeGradients(X_train, Y_train)
+        self.AnalyzeGradients(X_train, Y_train)
         print(Npts/n_batches, ' update steps.')
-        #""" Training
+        """ Training
         print('=-=- Starting Training -=-=')
         for i in range(epochs):
             for j in range(round(Npts/n_batches)):
