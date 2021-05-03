@@ -383,10 +383,16 @@ class ConvNet:
         print('F1: ',diff)
 
     def getLoss(self):
+        """ Returns the loss function.
+        """
         return self.losses
 
     def MakeConfusionMatrix(self, P, true, Nout):
-
+        """ Creates a confusion matrix of predictions and saves it in result/
+        :param P: Final predicted probabilities
+        :param true: true labels
+        :param Nout: Nout
+        """
         pred = np.argmax(P, axis=0).reshape(-1,1)
         CM = np.zeros((Nout, Nout))
         _, counts = np.unique(true, return_counts = True)
@@ -427,7 +433,6 @@ class ConvNet:
         Y_val = data.Y_val
         y_val = data.y_val - 1
 
-
         ##
         ##  Parameters
         ##
@@ -464,9 +469,9 @@ class ConvNet:
 
         #self.TestMFandMX()
         #self.debug()
-        #self.AnalyzeGradients(X_train, Y_train)
+        self.AnalyzeGradients(X_train, Y_train)
 
-        #""" Training
+        """ Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
 
         print('=-=- Starting Training -=-=')
