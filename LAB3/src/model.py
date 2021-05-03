@@ -7,8 +7,8 @@ class ConvNet:
 
     def __init__(self):
 
-        self.nlen = None
-        self.dx = None
+        self.nlen = None    # Width of an original data point
+        self.dx = None      # Heihgt of an original data point
 
         self.F1 = None
         self.F2 = None
@@ -17,42 +17,57 @@ class ConvNet:
         self.MF1 = None
         self.MF2 = None
 
-        self.counts = None
+        self.counts = None  # Count occurences of each label, e.g. {'0': 400 ...}
 
-        self.nlen = None
-        self.nlen1 = None
+        self.nlen1 = None   # Width of the data points from the first convolutional
+                            # layer. It is used in the backprop to generate MF.
+
+        self.losses = [[],[]]
 
     def MakeMFMatrix(self, F, nlen):
+        """ Creates the MF-matrix used for convolution operations.
+        :params F: A 3D filter with shape = (n_filters, height, width)
+        :params nlen: Width of the data points that
+        goes through the filter layer.
+        :return MF: The MF matrix
+        """
+        nf,d,k = F.shape
 
-    	nf,d,k = F.shape
+        zero = np.zeros((nf, nlen))
 
-    	zero = np.zeros((nf, nlen))
+        for filter in range(nf):
+            if filter == 0:
+                VF = F[filter].flatten(order = 'F')
+            else:
+                VF = np.vstack((VF, F[filter].flatten(order = 'F')))
 
-    	for filter in range(nf):
-    		if filter == 0:
-    			VF = F[filter].flatten(order = 'F')
-    		else:
-    			VF = np.vstack((VF, F[filter].flatten(order = 'F')))
+        MF = np.zeros(((nlen - k + 1)*nf, nlen*d))
 
-    	MF = np.zeros(((nlen - k + 1)*nf, nlen*d))
+        step = 0
+        Nelements = VF[0].size
 
-    	step = 0
-    	Nelements = VF[0].size
+        for i in range((nlen - k + 1)):
 
-    	for i in range((nlen - k + 1)):
+            for j in range(nf):
 
-    		for j in range(nf):
+                ind = j + i*nf
+                MF[ind, step:Nelements + step] = VF[j]
+                #print(VF[j])
 
-    			ind = j + i*nf
-    			MF[ind, step:Nelements + step] = VF[j]
-    			#print(VF[j])
+            step += d
 
-    		step += d
-
-    	return MF
+        return MF
 
     def MakeMXMatrix(self, x_input, d, k, nf, dx, nlen):
-
+        """ Creates the MX-matrix used for convolution operations.
+        :params x_input: A 1D data point with shape = (height*width, )
+        :params d: Height of the filter that are used in the convolutional layer
+        :params k: Width of the filter
+        :params nf: Number of filters in the layer
+        :params dx: Original height of x_input
+        :params nlen: Original width of x_input
+        :return MX: The MX matrix
+        """
         x_input = x_input.reshape((dx, nlen), order='F')
 
         I_nf = np.identity(nf)
@@ -78,17 +93,34 @@ class ConvNet:
 
         return MX
 
-    def forward(self, x_input, MF1, MF2, W):
-        # =-=-=- All Correct -=-=-= 100 %
-
-        S1 = ReLU(MF1 @ x_input)
-        S2 = ReLU(MF2 @ S1)
-        S = W@S2
+    def forward(self, X, MF1, MF2, W):
+        """ Computes the forward pass.
+    	:param X: Data matrix, shape = (Ndim, Npts)
+        :param MF1: Filters for the first convolutional layer
+        :param MF2: ilters for the first convolutional layer
+        :param W: Weights for the fully connected layer
+        :return X1: Values after the first ConvLayer
+        :return X2: Values after the second ConvLayer
+        :return P: Final predictions, shape = (Nout, Npts)
+        """
+        X1 = ReLU(MF1 @ X)
+        X2 = ReLU(MF2 @ X1)
+        S = W@X2
         P = softmax(S)
-        return S1, S2, S, P
+        return X1, X2, P
 
-    def backward(self, S1, S2, S, P, W, XBatch, YBatch):
-
+    def backward(self, S1, S2, P, W, XBatch, YBatch):
+        """ Computes the backward pass.
+        :param S1: Values after the first ConvLayer
+        :param S2: Values after the second ConvLayer
+        :param P:  Final predictions of the network
+        :param W:  Weights for the fully connected layer
+        :param XBatch: X mini batch
+        :param YBatch: Y mini batch
+        :return dW: Gradients for the fully connecte layer
+        :return dF2: Gradients for the second convolutional layer filters
+        :return dF1: Gradients for the first convolutional layer filters
+        """
         _, Npts = P.shape
 
         G = - (YBatch - P)
@@ -152,14 +184,25 @@ class ConvNet:
         return dW, dF2, dF1
 
     def update(self, dW, dF2, dF1, eta):
-
+        """ Updates the weights and filters.
+        :param dW: Gradients for the fully connecte layer
+        :param dF2: Gradients for the second convolutional layer filters
+        :param dF1: Gradients for the first convolutional layer filters
+        :param eta: Learning rate
+        """
         self.W -= dW * eta
         self.F2 -= dF2.reshape(self.F2.shape) * eta
         self.F1 -= dF1.reshape(self.F1.shape) * eta
 
     def ComputeCost(self, X, Y, MF1, MF2, W, F1, F2):
-
-        _,_,_, P  = self.forward(X, MF1, MF2, W)
+        """ Computes cost and loss.
+        :param X: Data matrix, shape = (Ndim, Npts)
+        :param Y: One hot encoded labels, shape =(Nout, Npts)
+        :param MF1: Filter matrix for the first convolutional layer
+        :param MF2: Filters for the second convolutional layer
+        :param W: Weight for the fully connected layer.
+        """
+        _,_, P  = self.forward(X, MF1, MF2, W)
         _, Npts = P.shape
 
         #loss = np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P)))
@@ -181,11 +224,18 @@ class ConvNet:
         return loss #+ reg
 
     def ComputeAccuracy(self, P, y):
+        """ Computes a score indicating the network accuracy.
+        :param P: Probabilities, shape = (Nout, Npts)
+        :param y: labels, shape = (Npts, )
+        :return: error rate. low is better.
+        """
         out = np.argmax(P, axis=0).reshape(-1,1)
+        np.savetxt('out.txt', out.astype(int))
         return 1 - np.mean(np.where(y==out, 0, 1))
 
     def ComputeGradsNumSlow(self, X, Y, W, F2, F1, h):
-
+        """ Computes numerical gradients.
+        """
         MF2 = self.MakeMFMatrix(F2, self.nlen1)
         MF1 = self.MakeMFMatrix(F1, self.nlen)
 
@@ -243,7 +293,9 @@ class ConvNet:
 
 
     def TestMFandMX(self):
-
+        """ This function test if the implementation of
+            MX and MF is correct.
+        """
         X_test = np.arange(1*6*4) + 1
         X_test = X_test.reshape(1,6,4)
         #print(X_test)
@@ -267,16 +319,10 @@ class ConvNet:
         print(np.all(s1 == s2)) # >>> True
 
 
-        #xoriginal = np.load('xoriginal.npy')
-        #xoriginal_flatten = np.load('xoriginal_flatten.npy')
-
-        #print(xoriginal_flatten)
-        #nf, d, k = self.F1.shape
-        #mx = self.MakeMXMatrix(xoriginal_flatten, d, k, nf, self.dx, self.nlen)
-        #print(mx[0, : 500])
-
     def debug(self):
-
+        """ This section test if the network functions
+        can reproduce vectors from DebugInfo.mat.
+        """
         import scipy.io
         d = scipy.io.loadmat('DebugInfo.mat')
 
@@ -301,21 +347,19 @@ class ConvNet:
         S2 = MX @debug_vecF
         print(S2[:, 0] == debug_vecS[:, 0])
 
-        #vF = vecF(debug_F)
-        #print(vF)
-        #print(debug_vecF)
-        #print(np.all(debug_vecF[:, 0] == vF))
-        #print(F_reshape.shape)
-
 
     def AnalyzeGradients(self, X, Y):
-
+        """ Computes and prints the difference between
+        numerical and analytical gradients.
+        :param X: Data matrix, shape = (Ndim, Npts)
+        :param Y: One hot matrix, shape = (Nout, Npts)
+        """
         XBatch = X[:, :5]
         YBatch = Y[:, :5]
 
-        S1, S2, S, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
+        S1, S2, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
-        grad_an, grad_an_F2, grad_an_F1 = self.backward(S1, S2, S, P, self.W, XBatch, YBatch)
+        grad_an, grad_an_F2, grad_an_F1 = self.backward(S1, S2, P, self.W, XBatch, YBatch)
         grad_num, grad_num_F2, grad_num_F1 = self.ComputeGradsNumSlow(XBatch, YBatch, self.W, self.F2, self.F1, 1e-5)
 
         #print(grad_num_F2)
@@ -338,9 +382,34 @@ class ConvNet:
         diff /= np.sum(np.add(np.abs(grad_an_F1), np.abs(grad_num_F1)))
         print('F1: ',diff)
 
+    def getLoss(self):
+        return self.losses
+
+    def MakeConfusionMatrix(self, pred, true, Nout):
+
+        CM = np.zeros((Nout, Nout))
+        _, counts = np.unique(true, return_counts = True)
+        for i in range(true.size):
+            true_y = true[i].astype(int)
+            pred_y = pred[i].astype(int)
+            CM[true_y, pred_y] += 1 / counts[true_y]
+
+        import matplotlib.pyplot as plt
+        plt.title('Confusion Matrix')
+        im = plt.imshow(CM, cmap = 'Blues')
+        plt.xlabel('Label')
+        plt.ylabel('Label')
+        plt.yticks(np.arange(18), np.arange(1, 19))
+        plt.xticks(np.arange(18), np.arange(1, 19))
+        bar = plt.colorbar(im)
+        plt.savefig('result/CM')
 
     def fit(self, data, p):
-
+        """ This function is called to start trining.
+        :param data: Object containing training and validation data
+        :param p: Object containing parameters used for training, i.e.
+        epochs, n_batch, eta, etc.
+        """
         ##
         ##  Data
         ##
@@ -387,25 +456,19 @@ class ConvNet:
         self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/self.F1.size)
         self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/self.F2.size)
 
-        #self.F1 = np.random.randn((p.n1, d, p.k1), Nout*p.n2 * nlen2*np.sqrt(2/(Nout*p.n2 * nlen2+p.n1*d*p.k1)))
-        #self.W = np.random.randn((Nout, (p.n2 * nlen2),1*np.sqrt(2/(Nout*p.n2 * nlen2))))
-        #print(self.F2.shape)
-        #print(self.F1.shape)
-        #print(self.W.shape)
-
         self.MF1 = self.MakeMFMatrix(self.F1, nlen)
         self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
         _, self.counts = np.unique(y_train, return_counts = True)
-        #print(unique, counts)
-        #=-=-=-=-=- Correct 100% -=-=-=-=-=
-        # nlen1 = 15
-        #print(nlen)
 
         #self.TestMFandMX()
         #self.debug()
-        self.AnalyzeGradients(X_train, Y_train)
-        print(Npts/n_batches, ' update steps.')
+        #self.AnalyzeGradients(X_train, Y_train)
+
+        pred = np.loadtxt('out.txt')
+        self.MakeConfusionMatrix(pred, y_val, Nout)
         """ Training
+        print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
+
         print('=-=- Starting Training -=-=')
         for i in range(epochs):
             for j in range(round(Npts/n_batches)):
@@ -416,33 +479,38 @@ class ConvNet:
                 self.MF1 = self.MakeMFMatrix(self.F1, nlen)
                 self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
 
-                S1, S2, S, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
+                S1, S2, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
-                gradients= self.backward(S1, S2, S, P, self.W, XBatch, YBatch)
+                gradients= self.backward(S1, S2, P, self.W, XBatch, YBatch)
 
                 self.update(*gradients, p.eta)
 
                 #X, Y, MF1, MF2, W):
-            loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
-            print('loss: ', loss)
-            print('Epoch: ', i)
+
+                if j % 10 == 0:
+                    loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
+                    update_step = i * round(Npts/n_batches) + j
+                    print(loss)
+                    self.losses[0].append(update_step)
+                    self.losses[1].append(loss)
+
+
+            print('Epoch: ', i + 1)
             print('\n')
 
         print('=-=- Training Completed -=-=')
 
-        S1, S2, S, P = self.forward(X_val, self.MF1, self.MF2, self.W)
+        S1, S2, P = self.forward(X_val, self.MF1, self.MF2, self.W)
         acc = self.ComputeAccuracy(P, y_val)
         print('Accuracy: ', acc)
+        print(y_val)
         #"""
 
-            #print(i)dW, dF2, dF1
-#    def backward(self, S1, S2, S, P, W, XBatch, YBatch):
-
+    def predict(self, X):
+        """ Predicts labels for data point-s
+        :param X: X data point with shape = (Ndim, Npts)
+        :return out: predicted label
         """
-        _,_,_, P = self.forward(MF1, MF2, W, x_input)
-
+        _,_, P = self.forward(X, self.MF1, self.MF2, self.W)
         out = np.argmax(P, axis=0).reshape(-1,1)
-        print(out)
-        print(1 - np.mean(np.where(y==out, 0, 1)))
-        #        out = np.argmax(P, axis=0).reshape(-1,1)
-        """
+        return out

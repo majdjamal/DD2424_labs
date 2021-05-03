@@ -1,5 +1,6 @@
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Params:
 
@@ -53,3 +54,12 @@ def vecF(F):
     		F_flattened = np.hstack((F_flattened, F[filter].flatten(order = 'F')))
 
     return F_flattened
+
+def plotter(X, Y):
+
+	plt.style.use('seaborn')
+	plt.xlabel('update steps')
+	plt.ylabel('loss')
+	plt.plot(X, Y, color = 'red', label = 'loss')
+	plt.legend()
+	plt.show()
