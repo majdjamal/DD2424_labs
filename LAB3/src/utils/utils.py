@@ -20,7 +20,8 @@ class Params:
 
 def softmax(x):
 	""" Standard definition of the softmax function """
-	return np.exp(x) / np.sum(np.exp(x), axis=0)
+	e_x = np.exp(x - np.max(x))
+	return e_x / np.sum(e_x, axis=0)
 
 def ReLU(x):
     """ Standard definition of the ReLU function """
