@@ -481,24 +481,25 @@ class ConvNet:
         ##  F1, F2, W, MF1, and MF2
         ##
         self.F1 = np.random.randn(p.n1, d, p.k1) * np.sqrt(2/d)
-        self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/d*p.k1)
-        self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/p.n1*p.k2)
+        self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/self.F1.size)
+        self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/self.F2.size)
 
         self.MF1 = self.MakeMFMatrix(self.F1, nlen)
         self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
         _, self.counts = np.unique(y_train, return_counts = True)
 
-
+        """
         nf, d, k = self.F1.shape
         for i in range(Npts):
             mx = self.MakeMXMatrix(X_train[:, i], d, k, nf, self.dx, self.nlen)
+            print(mx.shape)
             self.preMX.append(mx)
             print(i)
-
+        """
 
         #self.TestMFandMX()
         #self.debug()
-        #self.AnalyzeGradients(X_train, Y_train)
+        self.AnalyzeGradients(X_train, Y_train)
 
 
         """ Training
