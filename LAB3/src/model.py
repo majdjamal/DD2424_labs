@@ -7,22 +7,21 @@ class ConvNet:
 
     def __init__(self):
 
-        self.nlen = None    # Width of an original data point
-        self.dx = None      # Heihgt of an original data point
+        self.nlen = None    # Width of X
+        self.dx = None      # Heihgt of X
 
         self.F1 = None
         self.F2 = None
         self.W = None
-
         self.MF1 = None
         self.MF2 = None
 
         self.counts = None  # Count occurences of each label, e.g. {'0': 400 ...}
 
-        self.nlen1 = None   # Width of the data points from the first convolutional
-                            # layer. It is used in the backprop to generate MF.
+        self.nlen1 = None   # Width of S1
 
         self.losses = [[],[]]
+
 
     def MakeMFMatrix(self, F, nlen):
         """ Creates the MF-matrix used for convolution operations.
@@ -58,7 +57,7 @@ class ConvNet:
 
         return MF
 
-    def MakeMXMatrix(self, x_input, d, k, nf, dx, nlen):
+    def MakeMXMatrix(self, x_input, nf, d, k, dx, nlen):
         """ Creates the MX-matrix used for convolution operations.
         :params x_input: A 1D data point with shape = (height*width, )
         :params d: Height of the filter that are used in the convolutional layer
@@ -109,7 +108,7 @@ class ConvNet:
         P = softmax(S)
         return X1, X2, P
 
-    def backward(self, S1, S2, P, W, XBatch, YBatch):
+    def backward(self, S1, S2, P, W, XBatch, YBatch):#, ind):
         """ Computes the backward pass.
         :param S1: Values after the first ConvLayer
         :param S2: Values after the second ConvLayer
@@ -127,6 +126,7 @@ class ConvNet:
 
         #dW = G @ S2.T * (1/Npts)
         #dW1 = dW
+        dW = 0
 
         for j in range(Npts):
             g = G[:, j].reshape(-1, 1)
@@ -135,23 +135,19 @@ class ConvNet:
 
             py = (1/self.counts[y]) * (1/18)
 
-            if j == 0:
-                dW = g@s2.T * py
-            else:
-                dW += g@s2.T * py
+            dW += g@s2.T * py
 
-        # =-=-=- ^ Correct -=-=-= 100 %
+        dW /= Npts
 
         G = W.T @ G
         G = G * np.where(S2 > 0, 1, 0)
 
-        nf,d,k = self.F2.shape
-
+        nf, _,_ = self.F2.shape
         dF2 = 0
         for j in range(Npts):
             g = G[:, j].reshape(-1, 1)
             x = S1[:, j].reshape(-1, 1)
-            mx = self.MakeMXMatrix(x, d, k, nf, nf, self.nlen1)
+            mx = self.MakeMXMatrix(x, *self.F2.shape, nf, self.nlen1)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
             #s1 = mx @ vecF(self.F2)    #Check
@@ -160,6 +156,8 @@ class ConvNet:
             py = (1/self.counts[y]) * (1/18)
 
             dF2 += v * py
+
+        dF2 /= Npts
 
         G = self.MF2.T @ G
         G = G * np.where(S1 > 0, 1, 0)
@@ -171,7 +169,8 @@ class ConvNet:
         for j in range(Npts):
             g = G[:, j].reshape(-1, 1)
             x = XBatch[:, j].reshape(-1, 1)
-            mx = self.MakeMXMatrix(x, d, k, nf, self.dx, self.nlen)
+            mx = self.MakeMXMatrix(x, *self.F1.shape, self.dx, self.nlen)
+            #mx = self.preComputedMX[ind[j]]
             v = g.T @ mx
             y = YBatch[:, j].argmax()
             #s1 = mx @ vecF(self.F1)    #Check
@@ -180,6 +179,8 @@ class ConvNet:
             py = (1/self.counts[y]) * (1/18)
 
             dF1 += v * py
+
+        dF1 /= Npts
 
         return dW, dF2, dF1
 
@@ -219,6 +220,7 @@ class ConvNet:
             py = (1/self.counts[ind]) * (1/18)
             loss -= np.log(y.T @ p) * py
 
+        loss /= Npts
         #reg = lmd * (np.sum(np.square(W)) + np.sum(np.square(F1)) + np.sum(np.square(F2)))
 
         return loss #+ reg
@@ -323,6 +325,7 @@ class ConvNet:
         """ This section test if the network functions
         can reproduce vectors from DebugInfo.mat.
         """
+
         import scipy.io
         d = scipy.io.loadmat('utils/DebugInfo.mat')
 
@@ -347,6 +350,9 @@ class ConvNet:
         S2 = MX @debug_vecF
         print(S2[:, 0] == debug_vecS[:, 0])
 
+        my_S = S2.reshape(debug_S.shape)
+
+        print(my_S == debug_S)
 
     def AnalyzeGradients(self, X, Y):
         """ Computes and prints the difference between
@@ -421,9 +427,6 @@ class ConvNet:
         ##
         ##  Data
         ##
-        X = data.X
-        Y = data.Y
-        y = data.y - 1
 
         X_train = data.X_train
         Y_train = data.Y_train
@@ -440,7 +443,7 @@ class ConvNet:
         #General
         Ndim, Npts = X_train.shape
         self.dx, self.nlen = data.NUnique, data.NLongest
-        Nout, _ = Y.shape
+        Nout, _ = Y_train.shape
         epochs = p.epochs
         n_batches = p.n_batches
 
@@ -467,9 +470,17 @@ class ConvNet:
         self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
         _, self.counts = np.unique(y_train, return_counts = True)
 
+        """
+        nf, d, k = self.F1.shape
+        for i in range(Npts):
+            mx = self.MakeMXMatrix(X_train[:, i], d, k, nf, self.dx, self.nlen)
+            self.preComputedMX.append(mx)
+        """
+
         #self.TestMFandMX()
         #self.debug()
         self.AnalyzeGradients(X_train, Y_train)
+
 
         """ Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
@@ -481,18 +492,19 @@ class ConvNet:
                 ind = BatchCreator(j, n_batches).astype(int)
                 XBatch = X_train[:, ind]
                 YBatch = Y_train[:, ind]
+
                 self.MF1 = self.MakeMFMatrix(self.F1, nlen)
                 self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
 
                 S1, S2, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
-                gradients= self.backward(S1, S2, P, self.W, XBatch, YBatch)
+                gradients= self.backward(S1, S2, P, self.W, XBatch, YBatch, ind)
 
                 self.update(*gradients, p.eta)
 
                 #X, Y, MF1, MF2, W):
 
-                if j % 10 == 0:
+                if j % 50 == 0:
                     loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
                     update_step = i * round(Npts/n_batches) + j
                     print(loss)
