@@ -12,7 +12,7 @@ params = Params(
     n1 = 10, n2  = 10,
     k1 = 5, k2  = 5,
     eta  = 0.001, roh = 0.9,
-    epochs = 1, n_batches = 130)
+    epochs = 10, n_batches = 130)
 
 cnn = ConvNet()
 cnn.fit(data, params)

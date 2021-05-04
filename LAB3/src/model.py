@@ -19,7 +19,7 @@ class ConvNet:
         self.counts = None  # Count occurences of each label, e.g. {'0': 400 ...}
 
         self.nlen1 = None   # Width of S1
-
+        self.preMX = []
         self.losses = [[],[]]
 
 
@@ -135,7 +135,7 @@ class ConvNet:
 
             py = (1/self.counts[y]) * (1/18)
 
-            dW += g@s2.T * py
+            dW += g@s2.T #* py
 
         dW /= Npts
 
@@ -144,6 +144,7 @@ class ConvNet:
 
         nf, _,_ = self.F2.shape
         dF2 = 0
+
         for j in range(Npts):
             g = G[:, j].reshape(-1, 1)
             x = S1[:, j].reshape(-1, 1)
@@ -155,7 +156,7 @@ class ConvNet:
             #print(np.all(s1==s2))
             py = (1/self.counts[y]) * (1/18)
 
-            dF2 += v * py
+            dF2 += v #* py
 
         dF2 /= Npts
 
@@ -178,7 +179,7 @@ class ConvNet:
             #print(np.all(s1==s2))
             py = (1/self.counts[y]) * (1/18)
 
-            dF1 += v * py
+            dF1 += v #* py
 
         dF1 /= Npts
 
@@ -191,9 +192,20 @@ class ConvNet:
         :param dF1: Gradients for the first convolutional layer filters
         :param eta: Learning rate
         """
+
+        nf, d, k = self.F2.shape
+        nf1, d1, k1 = self.F1.shape
+
         self.W -= dW * eta
-        self.F2 -= dF2.reshape(self.F2.shape) * eta
-        self.F1 -= dF1.reshape(self.F1.shape) * eta
+        self.F2 -= dF2.reshape((d,k, nf), order='F').transpose([2,0,1]) * eta
+        self.F1 -= dF1.reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * eta
+
+        """
+        nf, d, k = self.F2.shape
+        nf1, d1, k1 = self.F1.shape
+        grad_an_F1 = grad_an_F1.reshape((d1,k1, nf1), order='F').transpose([2,0,1])
+        grad_an_F2 = grad_an_F2.reshape((d,k, nf), order='F').transpose([2,0,1])
+        """
 
     def ComputeCost(self, X, Y, MF1, MF2, W, F1, F2):
         """ Computes cost and loss.
@@ -217,8 +229,8 @@ class ConvNet:
             y = Y[:, j]
             p = P[:, j]
             ind = y.argmax()
-            py = (1/self.counts[ind]) * (1/18)
-            loss -= np.log(y.T @ p) * py
+            #py = (1/self.counts[ind]) * (1/18)
+            loss -= np.log(y.T @ p) #* py
 
         loss /= Npts
         #reg = lmd * (np.sum(np.square(W)) + np.sum(np.square(F1)) + np.sum(np.square(F2)))
@@ -232,7 +244,7 @@ class ConvNet:
         :return: error rate. low is better.
         """
         out = np.argmax(P, axis=0).reshape(-1,1)
-        np.savetxt('out.txt', out.astype(int))
+        #np.savetxt('out.txt', out.astype(int))
         return 1 - np.mean(np.where(y==out, 0, 1))
 
     def ComputeGradsNumSlow(self, X, Y, W, F2, F1, h):
@@ -308,18 +320,18 @@ class ConvNet:
         F_test = F_test.reshape(4,6,3)
         #print(F_test)
 
-        nf,d,k = F_test.shape
+        #nf,d,k = F_test.shape
 
         MF_test = self.MakeMFMatrix(F_test, 4)
         #print(MF_test)
-
-        MX_test = self.MakeMXMatrix(X_input, d, k, nf, 6, 4)
-        #print(MX_test)
+        print(X_input)
+        MX_test = self.MakeMXMatrix(X_input, *F_test.shape, 6, 4)
+        print(MX_test)
 
         s1 = MF_test @X_input
         s2 = MX_test @ vecF(F_test)
-        print(np.all(s1 == s2)) # >>> True
 
+        print(np.all(s1 == s2)) # >>> True
 
     def debug(self):
         """ This section test if the network functions
@@ -366,14 +378,20 @@ class ConvNet:
         S1, S2, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
         grad_an, grad_an_F2, grad_an_F1 = self.backward(S1, S2, P, self.W, XBatch, YBatch)
+
+
         grad_num, grad_num_F2, grad_num_F1 = self.ComputeGradsNumSlow(XBatch, YBatch, self.W, self.F2, self.F1, 1e-5)
 
-        #print(grad_num_F2)
         #print('\n'*3)
         #print(grad_an_F2.reshape(self.F2.shape))
-        grad_an_F1 = grad_an_F1.reshape(self.F1.shape)
-        grad_an_F2 = grad_an_F2.reshape(self.F2.shape)
+        nf, d, k = self.F2.shape
+        nf1, d1, k1 = self.F1.shape
+        grad_an_F1 = grad_an_F1.reshape((d1,k1, nf1), order='F').transpose([2,0,1])
+        grad_an_F2 = grad_an_F2.reshape((d,k, nf), order='F').transpose([2,0,1])
 
+        print(grad_an_F2)
+        print('*')
+        print(grad_num_F2)
         #print(grad_an_F1)
         diff = np.sum(np.abs(np.subtract(grad_an, grad_num)))
         diff /= np.sum(np.add(np.abs(grad_an), np.abs(grad_num)))
@@ -462,24 +480,25 @@ class ConvNet:
         ##  source: https://towardsdatascience.com/weight-initialization-techniques-in-neural-networks-26c649eb3b78
         ##  F1, F2, W, MF1, and MF2
         ##
-        self.F1 = np.random.randn(p.n1, d, p.k1) * np.sqrt(1/d)
-        self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/self.F1.size)
-        self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/self.F2.size)
+        self.F1 = np.random.randn(p.n1, d, p.k1) * np.sqrt(2/d)
+        self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/d*p.k1)
+        self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/p.n1*p.k2)
 
         self.MF1 = self.MakeMFMatrix(self.F1, nlen)
         self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
         _, self.counts = np.unique(y_train, return_counts = True)
 
-        """
+
         nf, d, k = self.F1.shape
         for i in range(Npts):
             mx = self.MakeMXMatrix(X_train[:, i], d, k, nf, self.dx, self.nlen)
-            self.preComputedMX.append(mx)
-        """
+            self.preMX.append(mx)
+            print(i)
+
 
         #self.TestMFandMX()
         #self.debug()
-        self.AnalyzeGradients(X_train, Y_train)
+        #self.AnalyzeGradients(X_train, Y_train)
 
 
         """ Training
@@ -498,7 +517,7 @@ class ConvNet:
 
                 S1, S2, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
-                gradients= self.backward(S1, S2, P, self.W, XBatch, YBatch, ind)
+                gradients= self.backward(S1, S2, P, self.W, XBatch, YBatch)#, ind)
 
                 self.update(*gradients, p.eta)
 
