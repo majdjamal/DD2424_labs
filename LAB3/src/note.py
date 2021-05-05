@@ -124,6 +124,51 @@ end = time.time()
 print('\n running time: ', str((end - start)*1000)[:6], 'ms') # >> 160 ms
 
 
+        zeros = np.zeros(dx*nlen)
+
+        #for i in range(nf):
+        #    vec = None
+        #    for j in range(nf):
+
+        #        print(j)
+        print(nf, d, k)
+        MX_tot = None
+
+        for m in range((nlen-k+1)*nf):
+            MX_opt = None
+            for i in range(k):
+                vec = None
+                for j in range(k):
+                    if i == j:
+                        if j == 0:
+                            vec = x_input[:, i:i+k].T.flatten()
+                        else:
+                            vec = np.hstack((vec, x_input[:, i:i+k].T.flatten()))
+                    else:
+                        if j == 0:
+                            vec = zeros
+                        else:
+                            vec = np.hstack((vec, zeros))
+
+                vec = vec.reshape(1,-1)
+
+                if i == 0:
+                    MX_opt = vec
+                else:
+
+                    MX_opt = np.vstack((MX_opt, vec))
+
+            if m == 0:
+                MX_tot = MX_opt
+            else:
+                MX_tot = np.vstack((MX_tot, MX_opt))
+
+        print('*')
+        print(MX_tot.shape)
+        print(MX.shape)
+        print(np.all(MX_tot == MX))
+
+
 """
 MX = np.zeros((
 (nlen-k+1)*nf,

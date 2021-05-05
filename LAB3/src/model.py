@@ -21,7 +21,7 @@ class ConvNet:
         self.nlen1 = None   # Width of S1
         self.preMX = []
         self.losses = [[],[]]
-
+        self.dL_dX = (0,0,0) #dW(t-1), dF2(t-1), dF1(t-1)
 
     def MakeMFMatrix(self, F, nlen):
         """ Creates the MF-matrix used for convolution operations.
@@ -60,13 +60,15 @@ class ConvNet:
     def MakeMXMatrix(self, x_input, nf, d, k, dx, nlen):
         """ Creates the MX-matrix used for convolution operations.
         :params x_input: A 1D data point with shape = (height*width, )
+        :params nf: Number of filters in the layer
         :params d: Height of the filter that are used in the convolutional layer
         :params k: Width of the filter
-        :params nf: Number of filters in the layer
         :params dx: Original height of x_input
         :params nlen: Original width of x_input
         :return MX: The MX matrix
         """
+        #import time
+        #s = time.time()
         x_input = x_input.reshape((dx, nlen), order='F')
 
         I_nf = np.identity(nf)
@@ -87,8 +89,6 @@ class ConvNet:
             #print(vec.shape)
             else:
                 MX = np.vstack((MX, vec))
-
-        #print(MX.shape)
 
         return MX
 
@@ -133,7 +133,7 @@ class ConvNet:
             s2 = S2[:, j].reshape(-1, 1)
             y = YBatch[:, j].argmax()
 
-            py = (1/self.counts[y]) * (1/18)
+            #py = (1/self.counts[y]) * (1/18)
 
             dW += g@s2.T #* py
 
@@ -154,7 +154,7 @@ class ConvNet:
             #s1 = mx @ vecF(self.F2)    #Check
             #s2 = self.MF2 @ x
             #print(np.all(s1==s2))
-            py = (1/self.counts[y]) * (1/18)
+            #py = (1/self.counts[y]) * (1/18)
 
             dF2 += v #* py
 
@@ -177,7 +177,7 @@ class ConvNet:
             #s1 = mx @ vecF(self.F1)    #Check
             #s2 = self.MF1 @ x
             #print(np.all(s1==s2))
-            py = (1/self.counts[y]) * (1/18)
+            #py = (1/self.counts[y]) * (1/18)
 
             dF1 += v #* py
 
@@ -185,7 +185,7 @@ class ConvNet:
 
         return dW, dF2, dF1
 
-    def update(self, dW, dF2, dF1, eta):
+    def update(self, dW, dF2, dF1, eta, rho):
         """ Updates the weights and filters.
         :param dW: Gradients for the fully connecte layer
         :param dF2: Gradients for the second convolutional layer filters
@@ -196,9 +196,9 @@ class ConvNet:
         nf, d, k = self.F2.shape
         nf1, d1, k1 = self.F1.shape
 
-        self.W -= dW * eta
-        self.F2 -= dF2.reshape((d,k, nf), order='F').transpose([2,0,1]) * eta
-        self.F1 -= dF1.reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * eta
+        self.W -= dW * eta #+ self.dL_dX[0] * rho
+        self.F2 -= dF2.reshape((d,k, nf), order='F').transpose([2,0,1]) * eta #+ self.dL_dX[1].reshape((d,k, nf), order='F').transpose([2,0,1]) * rho
+        self.F1 -= dF1.reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * eta #+ self.dL_dX[2].reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * rho
 
         """
         nf, d, k = self.F2.shape
@@ -305,7 +305,6 @@ class ConvNet:
 
         return grad_W1, grad_F2, grad_F1
 
-
     def TestMFandMX(self):
         """ This function test if the implementation of
             MX and MF is correct.
@@ -389,9 +388,7 @@ class ConvNet:
         grad_an_F1 = grad_an_F1.reshape((d1,k1, nf1), order='F').transpose([2,0,1])
         grad_an_F2 = grad_an_F2.reshape((d,k, nf), order='F').transpose([2,0,1])
 
-        print(grad_an_F2)
-        print('*')
-        print(grad_num_F2)
+
         #print(grad_an_F1)
         diff = np.sum(np.abs(np.subtract(grad_an, grad_num)))
         diff /= np.sum(np.add(np.abs(grad_an), np.abs(grad_num)))
@@ -410,6 +407,9 @@ class ConvNet:
         """ Returns the loss function.
         """
         return self.losses
+
+    def getWeights(self):
+        return self.F1, self.F2, self.W
 
     def MakeConfusionMatrix(self, P, true, Nout):
         """ Creates a confusion matrix of predictions and saves it in result/
@@ -481,12 +481,16 @@ class ConvNet:
         ##  F1, F2, W, MF1, and MF2
         ##
         self.F1 = np.random.randn(p.n1, d, p.k1) * np.sqrt(2/d)
-        self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/self.F1.size)
-        self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/self.F2.size)
+        self.F2 = np.random.randn(p.n2, p.n1, p.k2) * np.sqrt(2/(d*p.k1))
+        self.W = np.random.randn(Nout, (p.n2 * nlen2)) * np.sqrt(2/(p.n1*p.k2))
 
         self.MF1 = self.MakeMFMatrix(self.F1, nlen)
         self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
         _, self.counts = np.unique(y_train, return_counts = True)
+        self.dL_dX = (np.zeros(self.W.shape),np.zeros(self.F2.size),np.zeros(self.F1.size))
+
+
+        #self.MakeMXMatrix(X_train[:, 0], *self.F1.shape, self.dx, self.nlen)
 
         """
         nf, d, k = self.F1.shape
@@ -499,9 +503,8 @@ class ConvNet:
 
         #self.TestMFandMX()
         #self.debug()
-        self.AnalyzeGradients(X_train, Y_train)
-
-
+        #self.AnalyzeGradients(X_train, Y_train)
+        print(self.counts)
         """ Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
 
@@ -518,19 +521,19 @@ class ConvNet:
 
                 S1, S2, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
-                gradients= self.backward(S1, S2, P, self.W, XBatch, YBatch)#, ind)
+                gradients = self.backward(S1, S2, P, self.W, XBatch, YBatch)#, ind)
 
-                self.update(*gradients, p.eta)
+                self.update(*gradients, p.eta, p.roh)
+                #self.dL_dX = gradients
 
                 #X, Y, MF1, MF2, W):
 
                 if j % 50 == 0:
                     loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
                     update_step = i * round(Npts/n_batches) + j
-                    print(loss)
+                    print('loss: ', loss)
                     self.losses[0].append(update_step)
                     self.losses[1].append(loss)
-
 
             print('Epoch: ', i + 1)
             print('\n')
