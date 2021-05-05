@@ -145,7 +145,7 @@ class ConvNet:
         G = W.T @ G
         G = G * np.where(S2 > 0, 1, 0)
 
-        nf,d,k = self.F2.shape
+        nf,d,k = self.F1.shape
 
         dF2 = 0
         for j in range(Npts):
@@ -165,7 +165,7 @@ class ConvNet:
         G = G * np.where(S1 > 0, 1, 0)
 
 
-        nf,d,k = self.F1.shape
+        nf,d,k = self.F2.shape
 
         dF1 = 0
         for j in range(Npts):
@@ -541,7 +541,7 @@ class ConvNet:
 
         #self.TestMFandMX()
         #self.debug()
-        #self.AnalyzeGradients(X_train, Y_train)
+        self.AnalyzeGradients(x, y)
 
         """ Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')

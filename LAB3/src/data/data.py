@@ -74,7 +74,7 @@ for i in range(Npts):
         xoriginal_flatten = name2vec.flatten(order = 'F')
         np.save('xoriginal.npy', xoriginal)
         np.save('xoriginal_flatten.npy', xoriginal_flatten)
-        
+
     names2matrix[:, i] = name2vec.flatten(order = 'F')
 
 
@@ -96,6 +96,8 @@ np.save('final/X.npy', names2matrix)
 np.save('final/Y.npy', Y)
 np.save('final/ys.npy', ys)
 np.save('final/dims.npy', np.array([NUnique, NLongest, NClasses]))
+np.save('final/char2ind.npy', char2ind)
+
 
 end = time.time()
 print('running time: ', str((end - start)*1000)[:6], 'ms') # >> 160 ms

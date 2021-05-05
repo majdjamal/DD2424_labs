@@ -130,7 +130,7 @@ class ConvNet:
             s2 = S2[:, j].reshape(-1, 1)
             y = YBatch[:, j].argmax()
 
-            #py = (1/self.counts[y]) * (1/18)
+            py = (1/self.counts[y]) * (1/18)
 
             dW += g@s2.T #* py
 
@@ -148,7 +148,7 @@ class ConvNet:
             mx = self.MakeMXMatrix(x, *self.F2.shape, nf, self.nlen1)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
-            #py = (1/self.counts[y]) * (1/18)
+            py = (1/self.counts[y]) #* (1/18)
 
             dF2 += v #* py
 
@@ -168,7 +168,7 @@ class ConvNet:
             v = g.T @ mx
             y = YBatch[:, j].argmax()
 
-            #py = (1/self.counts[y]) * (1/18)
+            py = (1/self.counts[y]) * (1/18)
 
             dF1 += v #* py
 
@@ -219,7 +219,7 @@ class ConvNet:
             y = Y[:, j]
             p = P[:, j]
             ind = y.argmax()
-            #py = (1/self.counts[ind]) * (1/18)
+            py = (1/self.counts[ind]) * (1/18)
             loss -= np.log(y.T @ p) #* py
 
         loss /= Npts
@@ -233,7 +233,7 @@ class ConvNet:
         :param y: labels, shape = (Npts, )
         :return: error rate. low is better.
         """
-        out = np.argmax(P, axis=0).reshape(-1,1)
+        out = np.argmax(P, axis=0).reshape(1,-1)
         #np.savetxt('out.txt', out.astype(int))
         return 1 - np.mean(np.where(y==out, 0, 1))
 
@@ -414,7 +414,7 @@ class ConvNet:
         :param true: true labels
         :param Nout: Nout
         """
-        pred = np.argmax(P, axis=0).reshape(-1,1)
+        pred = np.argmax(P, axis=0).reshape(1,-1)
         CM = np.zeros((Nout, Nout))
         _, counts = np.unique(true, return_counts = True)
         for i in range(true.size):
@@ -430,8 +430,26 @@ class ConvNet:
         plt.yticks(np.arange(18), np.arange(1, 19))
         plt.xticks(np.arange(18), np.arange(1, 19))
         bar = plt.colorbar(im)
+        #plt.show()
         plt.savefig('result/CM')
         plt.close()
+
+    def name2vec(self, name):
+        """ Create a flattened vector representation of names.
+        :param name: string
+        :return X: Matrix representation with shape = (Height*Width, )
+        """
+
+        name2vec = np.zeros((self.dx, self.nlen))
+
+        for j in range(len(name)):
+
+            curr_char = name[j]
+            ind = self.char2ind.item().get(curr_char)
+
+            name2vec[ind][j] = 1
+
+        return name2vec.flatten(order = 'F')
 
     def fit(self, data, p):
         """ This function is called to start trining.
@@ -450,6 +468,8 @@ class ConvNet:
         X_val = data.X_val
         Y_val = data.Y_val
         y_val = data.y_val - 1
+
+        self.char2ind = np.load('data/final/char2ind.npy', allow_pickle=True)
 
         ##
         ##  Parameters
@@ -483,22 +503,32 @@ class ConvNet:
         self.dL_dX = (np.zeros(self.W.shape),np.zeros(self.F2.size),np.zeros(self.F1.size))
 
 
-
         #self.TestMFandMX() # Test implementation of MF and MX
         #self.debug()   # Take the Debug test
-        self.AnalyzeGradients(X_train, Y_train) # Analyze gradients.
+        #self.AnalyzeGradients(X_train, Y_train) # Analyze gradients.
 
         """ Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
 
+        indices = [np.where(y_train == cl)[0] for cl in range(Nout)]
+
         print('=-=- Starting Training -=-=')
         for i in range(epochs):
             for j in range(round(Npts/n_batches)):
+                XBatch = 0
+                YBatch = 0
 
-                ind = BatchCreator(j, n_batches).astype(int)
-                XBatch = X_train[:, ind]
-                YBatch = Y_train[:, ind]
+                for cls in range(Nout):
+                    rnd = np.random.randint(low=0, high=indices[cls].size, size=6)
+                    if cls == 0:
+                        XBatch = X_train[:, indices[cls][rnd]]
+                        YBatch = Y_train[:, indices[cls][rnd]]
+                    else:
 
+                        XBatch = np.hstack((XBatch, X_train[:, indices[cls][rnd]]))
+                        YBatch = np.hstack((YBatch, Y_train[:, indices[cls][rnd]]))
+
+                #print(XBatch.shape)
                 self.MF1 = self.MakeMFMatrix(self.F1, nlen)
                 self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
 
@@ -512,7 +542,7 @@ class ConvNet:
                 #X, Y, MF1, MF2, W):
 
                 if j % 50 == 0:
-                    loss = self.ComputeCost(X_train, Y_train, self.MF1, self.MF2, self.W, self.F1, self.F2)
+                    loss = self.ComputeCost(X_val, Y_val, self.MF1, self.MF2, self.W, self.F1, self.F2)
                     update_step = i * round(Npts/n_batches) + j
                     print('loss: ', loss)
                     self.losses[0].append(update_step)
@@ -529,15 +559,16 @@ class ConvNet:
         print('Accuracy: ', acc)
         #"""
 
-    def predict(self, X):
-        """ Predicts labels for data point-s
-        :param X: X data point with shape = (Ndim, Npts)
-        :return out: predicted label
+    def predict(self, name):
+        """ Predicts top 5 labels and their probabilities
+            for a data point.
+        :param name: string
+        :return out: top 5 predicted labels
+        :return prob: probabilities for the labels
         """
+        X = self.name2vec(name)
         _,_, P = self.forward(X, self.MF1, self.MF2, self.W)
-        out = np.argmax(P, axis=0).reshape(-1,1)
+        out = P.argsort(axis= 0)[-5:][::-1]
+        prob = P[out]
 
-        ######
-        ##TODO: Return a vector with 5 biggest probabilities.
-        ######
-        return out
+        return out, prob
