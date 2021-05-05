@@ -16,13 +16,14 @@ class ConvNet:
         self.MF1 = None
         self.MF2 = None
 
-        self.counts = None  # Count occurences of each label, e.g. {'0': 400 ...}
+        self.counts = None  # Count occurences of each label,
+                            # e.g. {'0': 400 ...}
 
         self.nlen1 = None   # Width of S1
         self.preMX = []
-        self.losses = [[],[]]
-        self.dL_dX = (0,0,0) #Memory used for momentum computations,
-                             #dW(t-1), dF2(t-1), dF1(t-1)
+        self.losses = [[],[]]    #Array to store validation losses
+        self.dL_dX = (0,0,0)     #Memory used for momentum computations,
+                                 #dW(t-1), dF2(t-1), dF1(t-1)
 
     def MakeMFMatrix(self, F, nlen):
         """ Creates the MF-matrix used for convolution operations.
@@ -122,15 +123,13 @@ class ConvNet:
 
         G = - (YBatch - P)
 
-
         dW = 0
 
         for j in range(Npts):
             g = G[:, j].reshape(-1, 1)
             s2 = S2[:, j].reshape(-1, 1)
             y = YBatch[:, j].argmax()
-
-            py = (1/self.counts[y]) * (1/18)
+            #py = (1/self.counts[y]) * (1/18)
 
             dW += g@s2.T #* py
 
@@ -148,7 +147,7 @@ class ConvNet:
             mx = self.MakeMXMatrix(x, *self.F2.shape, nf, self.nlen1)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
-            py = (1/self.counts[y]) #* (1/18)
+            #py = (1/self.counts[y]) * (1/18)
 
             dF2 += v #* py
 
@@ -167,8 +166,7 @@ class ConvNet:
             mx = self.MakeMXMatrix(x, *self.F1.shape, self.dx, self.nlen)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
-
-            py = (1/self.counts[y]) * (1/18)
+            #py = (1/self.counts[y]) * (1/18)
 
             dF1 += v #* py
 
@@ -208,11 +206,7 @@ class ConvNet:
         _,_, P  = self.forward(X, MF1, MF2, W)
         _, Npts = P.shape
 
-        #loss = np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P)))
-        #loss = np.mean(-np.log(np.diag(Y.T @ P)))
-
         loss = 0
-        lmd = 0.001
 
         for j in range(Npts):
 
@@ -223,9 +217,8 @@ class ConvNet:
             loss -= np.log(y.T @ p) #* py
 
         loss /= Npts
-        #reg = lmd * (np.sum(np.square(W)) + np.sum(np.square(F1)) + np.sum(np.square(F2)))
 
-        return loss #+ reg
+        return loss
 
     def ComputeAccuracy(self, P, y):
         """ Computes a score indicating the network accuracy.
@@ -253,8 +246,6 @@ class ConvNet:
                 W1_try = np.array(W)
                 W1_try[i,j] += h
                 c2 = self.ComputeCost(X, Y, MF1, MF2, W1_try, F1, F2)
-
-                #print((c2 - c1) / (2 * h))
 
                 grad_W1[i,j] = (c2 - c1) / (2 * h)
 
@@ -290,7 +281,6 @@ class ConvNet:
                     MF1_try = self.MakeMFMatrix(F1_try, self.nlen)
                     c2 = self.ComputeCost(X, Y, MF1_try, MF2, W, F1, F2)
 
-                    #print((c2 - c1) / (2 * h))
                     grad_F1[k, i, j] = (c2 - c1) / (2 * h)
 
         return grad_W1, grad_F2, grad_F1

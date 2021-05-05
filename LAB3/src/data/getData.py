@@ -44,8 +44,6 @@ def getData():
     validation_indicies = np.loadtxt('data/dataset/Validation_Inds.txt').astype(int)
     training_indicies = np.delete(all_indices, validation_indicies)
 
-
-
     data = Data(
     X_train = X[:, training_indicies] ,
     Y_train = Y[:, training_indicies],
