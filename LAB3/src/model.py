@@ -502,22 +502,27 @@ class ConvNet:
         _, self.counts = np.unique(y_train, return_counts = True)
         self.dL_dX = (np.zeros(self.W.shape),np.zeros(self.F2.size),np.zeros(self.F1.size))
 
-
+        ##
+        ##  Debug
+        ##
         #self.TestMFandMX() # Test implementation of MF and MX
         #self.debug()   # Take the Debug test
         #self.AnalyzeGradients(X_train, Y_train) # Analyze gradients.
 
-        #""" Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
+        print('=-=- Starting Training -=-=')
 
         indices = [np.where(y_train == cl)[0] for cl in range(Nout)]
 
-        print('=-=- Starting Training -=-=')
         for i in range(epochs):
             for j in range(round(Npts/n_batches)):
                 XBatch = 0
                 YBatch = 0
 
+                ##
+                ##  Generate mini batches with equal
+                ##  label distribution
+                ##
                 for cls in range(Nout):
                     rnd = np.random.randint(low=0, high=indices[cls].size, size=6)
                     if cls == 0:
@@ -528,7 +533,7 @@ class ConvNet:
                         XBatch = np.hstack((XBatch, X_train[:, indices[cls][rnd]]))
                         YBatch = np.hstack((YBatch, Y_train[:, indices[cls][rnd]]))
 
-                #print(XBatch.shape)
+
                 self.MF1 = self.MakeMFMatrix(self.F1, nlen)
                 self.MF2 = self.MakeMFMatrix(self.F2, nlen1)
 
@@ -539,8 +544,7 @@ class ConvNet:
                 self.update(*gradients, p.eta, p.roh)
                 self.dL_dX = gradients
 
-                #X, Y, MF1, MF2, W):
-
+                # Evaluate the model after 50th update step
                 if j % 50 == 0:
                     loss = self.ComputeCost(X_val, Y_val, self.MF1, self.MF2, self.W, self.F1, self.F2)
                     update_step = i * round(Npts/n_batches) + j
@@ -553,6 +557,9 @@ class ConvNet:
 
         print('=-=- Training Completed -=-=')
 
+        ##
+        ##  Network evaluation
+        ##
         S1, S2, P = self.forward(X_val, self.MF1, self.MF2, self.W)
         self.MakeConfusionMatrix(P, y_val, Nout)
         acc = self.ComputeAccuracy(P, y_val)

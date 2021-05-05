@@ -23,10 +23,12 @@ cnn = ConvNet()
 #=-=-=-=-=-=-=
 cnn.fit(data, params)
 weights = cnn.getWeights()  #[F1, F2, W]
-#np.save('data/weights/weights.npy', weights)
 loss_ind, loss = cnn.getLoss()
-#plotter(loss_ind, loss)
-#np.save('loss.npy', [loss_ind, loss])
+plotter(loss_ind, loss)
+
+#Save weights
+np.save('data/weights/weights.npy', weights)
+np.save('loss.npy', [loss_ind, loss])
 
 #=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 #   Classification test with
