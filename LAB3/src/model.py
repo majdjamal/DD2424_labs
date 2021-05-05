@@ -196,9 +196,14 @@ class ConvNet:
         nf, d, k = self.F2.shape
         nf1, d1, k1 = self.F1.shape
 
-        self.W -= dW * eta #+ self.dL_dX[0] * rho
-        self.F2 -= dF2.reshape((d,k, nf), order='F').transpose([2,0,1]) * eta #+ self.dL_dX[1].reshape((d,k, nf), order='F').transpose([2,0,1]) * rho
-        self.F1 -= dF1.reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * eta #+ self.dL_dX[2].reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * rho
+        self.W -= (dW * eta
+                + self.dL_dX[0] * rho)
+
+        self.F2 -= (dF2.reshape((d,k, nf), order='F').transpose([2,0,1]) * eta
+        + self.dL_dX[1].reshape((d,k, nf), order='F').transpose([2,0,1]) * rho)
+
+        self.F1 -= (dF1.reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * eta
+         + self.dL_dX[2].reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * rho)
 
         """
         nf, d, k = self.F2.shape
@@ -504,8 +509,8 @@ class ConvNet:
         #self.TestMFandMX()
         #self.debug()
         #self.AnalyzeGradients(X_train, Y_train)
-        print(self.counts)
-        """ Training
+
+        #""" Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
 
         print('=-=- Starting Training -=-=')
@@ -524,7 +529,7 @@ class ConvNet:
                 gradients = self.backward(S1, S2, P, self.W, XBatch, YBatch)#, ind)
 
                 self.update(*gradients, p.eta, p.roh)
-                #self.dL_dX = gradients
+                self.dL_dX = gradients
 
                 #X, Y, MF1, MF2, W):
 
