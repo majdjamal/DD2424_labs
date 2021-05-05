@@ -219,7 +219,7 @@ class ConvNet:
             y = Y[:, j]
             p = P[:, j]
             ind = y.argmax()
-            py = (1/self.counts[ind]) * (1/18)
+            #py = (1/self.counts[ind]) * (1/18)
             loss -= np.log(y.T @ p) #* py
 
         loss /= Npts
@@ -356,7 +356,7 @@ class ConvNet:
         print(my_S == debug_S)
 
     def plotLabelDist(self):
-        """ Plots a bar diagram of the label distribution.
+        """ Plots label distribution.
         """
         import matplotlib.pyplot as plt
         plt.style.use('seaborn')
@@ -414,7 +414,7 @@ class ConvNet:
         :param true: true labels
         :param Nout: Nout
         """
-        pred = np.argmax(P, axis=0).reshape(1,-1)
+        pred = np.argmax(P, axis=0)
         CM = np.zeros((Nout, Nout))
         _, counts = np.unique(true, return_counts = True)
         for i in range(true.size):
@@ -507,7 +507,7 @@ class ConvNet:
         #self.debug()   # Take the Debug test
         #self.AnalyzeGradients(X_train, Y_train) # Analyze gradients.
 
-        """ Training
+        #""" Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
 
         indices = [np.where(y_train == cl)[0] for cl in range(Nout)]

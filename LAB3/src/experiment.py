@@ -15,7 +15,7 @@ params = Params(
     n1 = 20, n2  = 20,
     k1 = 5, k2  = 3,
     eta  = 0.001, roh = 0.9,
-    epochs = 130, n_batches = 108)
+    epochs = 3, n_batches = 108)
 cnn = ConvNet()
 
 #=-=-=-=-=-=-=
