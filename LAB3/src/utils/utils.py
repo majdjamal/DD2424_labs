@@ -3,7 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Params:
-
+	""" Object that are used to pass arguments to the deep network.
+	"""
 	def __init__(self, n1, n2, k1, k2, eta, roh, epochs, n_batches):
 
 		self.n1 = n1
@@ -35,16 +36,18 @@ def BatchCreator(j, n_batches):
     return ind
 
 def vecX(x, d, nlen):
-    """
-        OBS: To classify x data points, they need to pass through this
-        vector-converter.
+    """ Vectorizes an x-data point in a similar fashion to Matlab.
+	:param x: data point, with shape = (Ndim, )
+	:param d: height of the original shape
+	:param nlen: width - "" -
+	:return: vectorized version of data point x
     """
     return x.reshape((d, nlen)).flatten(order = 'F')
 
 def vecF(F):
-    """
-        OBS: To classify with filter F, it need to be flattened
-        through this converter.
+    """ Vectorizes an x-data point in a similar fashion to Matlab.
+	:param x: Filter, with shape (#filters, width, height)
+	:return: vectorized filter in 1D
     """
     nf,_,_ = F.shape
     for filter in range(nf):
@@ -57,7 +60,10 @@ def vecF(F):
     return F_flattened
 
 def plotter(X, Y):
-
+	""" Plotting the loss function.
+	:param X: x-coordinates, which are used as update steps
+	:param Y: loss values
+	"""
 	plt.style.use('seaborn')
 	plt.xlabel('update steps')
 	plt.ylabel('loss')
