@@ -9,10 +9,10 @@ start = time.time()
 
 data = getData()
 params = Params(
-    n1 = 20, n2  = 20,
+    n1 = 10, n2  = 10,
     k1 = 5, k2  = 3,
-    eta  = 0.001, roh = 0.9,
-    epochs = 1, n_batches = 130)
+    eta  = 0.003, roh = 0.9,
+    epochs = 100, n_batches = 100)
 
 cnn = ConvNet()
 cnn.fit(data, params)

@@ -8,7 +8,7 @@ class ConvNet:
     def __init__(self):
 
         self.nlen = None    # Width of X
-        self.dx = None      # Heihgt of X
+        self.dx = None      # Height of X
 
         self.F1 = None
         self.F2 = None
@@ -21,7 +21,8 @@ class ConvNet:
         self.nlen1 = None   # Width of S1
         self.preMX = []
         self.losses = [[],[]]
-        self.dL_dX = (0,0,0) #dW(t-1), dF2(t-1), dF1(t-1)
+        self.dL_dX = (0,0,0) #Memory used for momentum computations,
+                             #dW(t-1), dF2(t-1), dF1(t-1)
 
     def MakeMFMatrix(self, F, nlen):
         """ Creates the MF-matrix used for convolution operations.
@@ -51,7 +52,6 @@ class ConvNet:
 
                 ind = j + i*nf
                 MF[ind, step:Nelements + step] = VF[j]
-                #print(VF[j])
 
             step += d
 
@@ -67,8 +67,6 @@ class ConvNet:
         :params nlen: Original width of x_input
         :return MX: The MX matrix
         """
-        #import time
-        #s = time.time()
         x_input = x_input.reshape((dx, nlen), order='F')
 
         I_nf = np.identity(nf)
@@ -86,7 +84,7 @@ class ConvNet:
 
             if i == 0:
                 MX = vec
-            #print(vec.shape)
+
             else:
                 MX = np.vstack((MX, vec))
 
@@ -124,8 +122,7 @@ class ConvNet:
 
         G = - (YBatch - P)
 
-        #dW = G @ S2.T * (1/Npts)
-        #dW1 = dW
+
         dW = 0
 
         for j in range(Npts):
@@ -151,9 +148,6 @@ class ConvNet:
             mx = self.MakeMXMatrix(x, *self.F2.shape, nf, self.nlen1)
             v = g.T @ mx
             y = YBatch[:, j].argmax()
-            #s1 = mx @ vecF(self.F2)    #Check
-            #s2 = self.MF2 @ x
-            #print(np.all(s1==s2))
             #py = (1/self.counts[y]) * (1/18)
 
             dF2 += v #* py
@@ -171,12 +165,9 @@ class ConvNet:
             g = G[:, j].reshape(-1, 1)
             x = XBatch[:, j].reshape(-1, 1)
             mx = self.MakeMXMatrix(x, *self.F1.shape, self.dx, self.nlen)
-            #mx = self.preComputedMX[ind[j]]
             v = g.T @ mx
             y = YBatch[:, j].argmax()
-            #s1 = mx @ vecF(self.F1)    #Check
-            #s2 = self.MF1 @ x
-            #print(np.all(s1==s2))
+
             #py = (1/self.counts[y]) * (1/18)
 
             dF1 += v #* py
@@ -196,6 +187,7 @@ class ConvNet:
         nf, d, k = self.F2.shape
         nf1, d1, k1 = self.F1.shape
 
+        # -= gradient * learning rate + momentum
         self.W -= (dW * eta
                 + self.dL_dX[0] * rho)
 
@@ -204,13 +196,6 @@ class ConvNet:
 
         self.F1 -= (dF1.reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * eta
          + self.dL_dX[2].reshape((d1,k1, nf1), order='F').transpose([2,0,1]) * rho)
-
-        """
-        nf, d, k = self.F2.shape
-        nf1, d1, k1 = self.F1.shape
-        grad_an_F1 = grad_an_F1.reshape((d1,k1, nf1), order='F').transpose([2,0,1])
-        grad_an_F2 = grad_an_F2.reshape((d,k, nf), order='F').transpose([2,0,1])
-        """
 
     def ComputeCost(self, X, Y, MF1, MF2, W, F1, F2):
         """ Computes cost and loss.
@@ -370,14 +355,24 @@ class ConvNet:
 
         print(my_S == debug_S)
 
+    def plotLabelDist(self):
+        """ Plots a bar diagram of the label distribution.
+        """
+        import matplotlib.pyplot as plt
+        plt.style.use('seaborn')
+        plt.bar([str(i) for i in range(1,19)], self.counts, color='#ff7f4f')
+        plt.xlabel('label')
+        plt.ylabel('occurences')
+        plt.show()
+
     def AnalyzeGradients(self, X, Y):
         """ Computes and prints the difference between
         numerical and analytical gradients.
         :param X: Data matrix, shape = (Ndim, Npts)
         :param Y: One hot matrix, shape = (Nout, Npts)
         """
-        XBatch = X[:, :5]
-        YBatch = Y[:, :5]
+        XBatch = X[:, :100]
+        YBatch = Y[:, :100]
 
         S1, S2, P = self.forward(XBatch, self.MF1, self.MF2, self.W)
 
@@ -386,20 +381,15 @@ class ConvNet:
 
         grad_num, grad_num_F2, grad_num_F1 = self.ComputeGradsNumSlow(XBatch, YBatch, self.W, self.F2, self.F1, 1e-5)
 
-        #print('\n'*3)
-        #print(grad_an_F2.reshape(self.F2.shape))
         nf, d, k = self.F2.shape
         nf1, d1, k1 = self.F1.shape
         grad_an_F1 = grad_an_F1.reshape((d1,k1, nf1), order='F').transpose([2,0,1])
         grad_an_F2 = grad_an_F2.reshape((d,k, nf), order='F').transpose([2,0,1])
 
-
-        #print(grad_an_F1)
         diff = np.sum(np.abs(np.subtract(grad_an, grad_num)))
         diff /= np.sum(np.add(np.abs(grad_an), np.abs(grad_num)))
         print('W: ', diff)
 
-        #print(np.abs(grad_an_F2 - grad_num_F2))
         diff = np.sum(np.abs(grad_an_F2 - grad_num_F2))
         diff /= np.sum(np.abs(grad_an_F2) + np.abs(grad_num_F2))
         print('F2: ',diff)
@@ -414,6 +404,8 @@ class ConvNet:
         return self.losses
 
     def getWeights(self):
+        """ Returns weights
+        """
         return self.F1, self.F2, self.W
 
     def MakeConfusionMatrix(self, P, true, Nout):
@@ -447,10 +439,10 @@ class ConvNet:
         :param p: Object containing parameters used for training, i.e.
         epochs, n_batch, eta, etc.
         """
+
         ##
         ##  Data
         ##
-
         X_train = data.X_train
         Y_train = data.Y_train
         y_train = data.y_train - 1
@@ -462,20 +454,16 @@ class ConvNet:
         ##
         ##  Parameters
         ##
-
-        #General
         Ndim, Npts = X_train.shape
         self.dx, self.nlen = data.NUnique, data.NLongest
         Nout, _ = Y_train.shape
         epochs = p.epochs
         n_batches = p.n_batches
 
-        #height of F1
-        d = data.NUnique
-
-        nlen = data.NLongest
-        nlen1 = nlen - p.k1 + 1
-        nlen2 = nlen1 - p.k2 + 1
+        d = data.NUnique            #height of F1
+        nlen = data.NLongest        #width of X
+        nlen1 = nlen - p.k1 + 1     #width of X1
+        nlen2 = nlen1 - p.k2 + 1    #width of X2
 
         self.nlen = nlen
         self.nlen1 = nlen1
@@ -495,22 +483,12 @@ class ConvNet:
         self.dL_dX = (np.zeros(self.W.shape),np.zeros(self.F2.size),np.zeros(self.F1.size))
 
 
-        #self.MakeMXMatrix(X_train[:, 0], *self.F1.shape, self.dx, self.nlen)
 
-        """
-        nf, d, k = self.F1.shape
-        for i in range(Npts):
-            mx = self.MakeMXMatrix(X_train[:, i], d, k, nf, self.dx, self.nlen)
-            print(mx.shape)
-            self.preMX.append(mx)
-            print(i)
-        """
+        #self.TestMFandMX() # Test implementation of MF and MX
+        #self.debug()   # Take the Debug test
+        self.AnalyzeGradients(X_train, Y_train) # Analyze gradients.
 
-        #self.TestMFandMX()
-        #self.debug()
-        #self.AnalyzeGradients(X_train, Y_train)
-
-        #""" Training
+        """ Training
         print('=-=- Settings -=-= \n epochs: ', epochs, ' steps/epoch: , ', round(Npts/n_batches), ' learning rate: ' , p.eta, '\n')
 
         print('=-=- Starting Training -=-=')
@@ -558,4 +536,8 @@ class ConvNet:
         """
         _,_, P = self.forward(X, self.MF1, self.MF2, self.W)
         out = np.argmax(P, axis=0).reshape(-1,1)
+
+        ######
+        ##TODO: Return a vector with 5 biggest probabilities.
+        ######
         return out
