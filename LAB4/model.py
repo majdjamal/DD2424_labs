@@ -1,2 +1,4 @@
 
-print('hej')
+__author__ = 'Majd Jamal'
+
+import numpy as np
