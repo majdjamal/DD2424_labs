@@ -31,6 +31,8 @@ NUnique = len(chars)
 char_to_ind = {}
 ind_to_char = {}
 
+X = np.zeros((NUnique, len(book_data)))
+
 for i in range(len(chars)):
     vec = np.zeros((NUnique, 1))
     char = chars[i]
@@ -40,7 +42,14 @@ for i in range(len(chars)):
     char_to_ind[char] = vec
     ind_to_char[i] = char
 
+for i in range(len(book_data)):
+    char = book_data[i]
+    vec = char_to_ind[char]
+
+    X[:, i] = vec[:,0]
+
 np.save('processed/book_data.npy', book_data)
+np.save('processed/X.npy', X)
 np.save('processed/ind_to_char.npy', ind_to_char)
 np.save('processed/char_to_ind.npy', char_to_ind)
 np.save('processed/NUnique.npy', NUnique)

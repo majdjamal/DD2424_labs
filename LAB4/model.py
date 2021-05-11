@@ -16,29 +16,53 @@ class VRNN:
         self.b = None
         self.c = None
 
-        self.h_0 = None
+        self.h_t_1 = None
+        self.h_t = None
 
         self.char_to_ind = None
         self.ind_to_char = None
 
-    def forward(self, X, h_t_1):
-        """ Computes the forward pass
+        self.AdaGradTerm = 0
+
+    def forward(self, X):
+        """ Computes the forward pass with
+            tanH and softmax activations.
+        :param X: matrix representation of
+                  a character sequence.
+                  shape = (K, Npts)
+        :return o_t: non-normalized output probabilities,
+                  shape = (K, Npts)
+        :return p_t: normalized probabilities,
+                    shape = (K, Npts)
         """
 
-        a_t = self.W @ h_t_1 0 self.U@X + self.b
+        a_t = self.W @ self.h_t_1 + self.U@X + self.b
         h_t = tanh(a_t)
         o_t = self.V@h_t + self.c
         p_t = softmax(o_t)
 
-        return o_t, p_t
+        return a_t, h_t, o_t, p_t
 
-    def backward(self):
+    def backward(self, Y, P, h_t):
         """
         ##  TODO: Write backward pass with instructions
         ##  from lecture 9. Solve the gradient for the bias terms.
         ##
         """
+
+        G = - (Y - P)
+
+        dL_dV = h_t @ G
+
         pass
+
+    def update(self, dL_dV, dL_dW, dL_dU, eta, eps = 0.001):
+
+        m = self.AdaGradTerm + np.square(dL_dV)
+
+        self.V -= eta/np.sqrt(m + eps) * dL_dV
+
+
 
 
     def loss(self, Y, P):
@@ -52,6 +76,7 @@ class VRNN:
         ## Unpacking data
         ##
         book_data = data.book_data
+        X = data.X
         K = data.NUnique
         self.char_to_ind = data.char_to_ind
         self.ind_to_char = data.ind_to_char
@@ -73,6 +98,18 @@ class VRNN:
         self.U = np.random.randn(m, K) * sig
         self.W = np.random.randn(m, m) * sig
         self.V = np.random.randn(K, m) * sig
+        self.b = np.zeros((m,1))
+        self.c = np.zeros((K,1))
 
-        X_chars = book_data[e:seq_lenght]
-        Y_chars = book_data[e + 1 :seq_lenght + 1]
+        ##
+        ##  Initializing hidden states
+        ##
+        self.h_t_1 = np.zeros((m,1))
+
+        ##
+        ##  Forward pass
+        ##
+        X_train = X[:, e:e+seq_length]
+        Y_train = X[:, e + 1 :e + 1 +seq_length]
+        a_t, h_t, o_t, p_t = self.forward(X_train)
+        loss = self.loss(Y_train, p_t)
