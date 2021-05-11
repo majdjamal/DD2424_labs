@@ -24,6 +24,8 @@ class VRNN:
 
         self.AdaGradTerm = 0
 
+        self.lossData = [[],[],[]] # [step, train_loss, val_loss]
+
     def forward(self, X):
         """ Computes the forward pass with
             tanH and softmax activations.
@@ -52,7 +54,7 @@ class VRNN:
 
         G = - (Y - P)
 
-        dL_dV = h_t @ G
+        dL_dV = h_t @G
 
         pass
 
@@ -63,12 +65,15 @@ class VRNN:
         self.V -= eta/np.sqrt(m + eps) * dL_dV
 
 
-
-
     def loss(self, Y, P):
         """ Computes loss
         """
         return np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P)))
+
+    def getLoss(self):
+        """ Returns loss from the training
+        """
+        return self.lossData
 
     def fit(self, data, params):
 
@@ -87,7 +92,8 @@ class VRNN:
         m = params.m
         seq_length = params.seq_length
         eta = params.eta
-        sig = params.eta
+        sig = params.sig
+        epochs = params.epochs
 
         e = 0 # Tracker
 
@@ -113,3 +119,8 @@ class VRNN:
         Y_train = X[:, e + 1 :e + 1 +seq_length]
         a_t, h_t, o_t, p_t = self.forward(X_train)
         loss = self.loss(Y_train, p_t)
+
+        print(' =-=-=-=- Network parameters -=-=-=-= ')
+        print(' =- epochs: ', epochs, ' learning_rate: ', eta)
+        print(' =- hidden_units: ', m, ' seq_length: ', seq_length)
+        print(' =-=-=-=- Starting training -=-=-=-= \n')

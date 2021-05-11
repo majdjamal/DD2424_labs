@@ -8,7 +8,7 @@ from model import VRNN
 
 data = getData()
 params = Params(
-    m = 100, seq_length = 25, eta = 0.1, sig = 0.1
+    m = 100, seq_length = 25, eta = 0.1, sig = 0.1, epochs = 2
     )
 
 vrnn = VRNN()

@@ -5,12 +5,13 @@ import numpy as np
 
 class Params:
 
-    def __init__(self, m, seq_length, eta, sig):
+    def __init__(self, m, seq_length, eta, sig, epochs):
 
         self.m = m # hidden units
         self.seq_length = seq_length
         self.eta = eta  # learning rate
         self.sig = sig  # variance when initializing weights
+        self.epochs = epochs
 
 def softmax(x):
 	""" Standard definition of the softmax function """
