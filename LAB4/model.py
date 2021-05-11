@@ -22,11 +22,11 @@ class VRNN:
         self.char_to_ind = None
         self.ind_to_char = None
 
-        self.AdaGradTerm = 0
+        self.AdaGradTerm = {}
 
         self.lossData = [[],[],[]] # [step, train_loss, val_loss]
 
-    def forward(self, X):
+    def forward(self, X, V, U, W, b, c):
         """ Computes the forward pass with
             tanH and softmax activations.
         :param X: matrix representation of
@@ -54,16 +54,26 @@ class VRNN:
 
         G = - (Y - P)
 
-        dL_dV = h_t @G
+        dL_dV = self.h_t_1 @ G
 
-        pass
+        dL_dV, dL_dU, dL_dW, dL_db, dL_dc = 0,0,0,0,0
 
-    def update(self, dL_dV, dL_dW, dL_dU, eta, eps = 0.001):
+        return dL_dV, dL_dU, dL_dW, dL_db, dL_dc
 
-        m = self.AdaGradTerm + np.square(dL_dV)
+    def update(self, dL_dV, dL_dU, dL_dW, dL_db, dL_dc, eta, eps = 1e-8):
 
-        self.V -= eta/np.sqrt(m + eps) * dL_dV
+        m_V = self.AdaGradTerm['V'] + np.square(dL_dV) + eps
+        m_U = self.AdaGradTerm['U'] + np.square(dL_dU) + eps
+        m_W = self.AdaGradTerm['W'] + np.square(dL_dW) + eps
+        m_b = self.AdaGradTerm['b'] + np.square(dL_db) + eps
+        m_c = self.AdaGradTerm['c'] + np.square(dL_dc) + eps
 
+        self.V -= eta/np.sqrt(m_V) * dL_dV
+        self.U -= eta/np.sqrt(m_U) * dL_dV
+        self.W -= eta/np.sqrt(m_W) * dL_dV
+
+        self.b -= eta/np.sqrt(m_b) * dL_db
+        self.c -= eta/np.sqrt(m_c) * dL_dc
 
     def loss(self, Y, P):
         """ Computes loss
@@ -74,6 +84,152 @@ class VRNN:
         """ Returns loss from the training
         """
         return self.lossData
+
+    def NumericalVSAnalytic(self, grad_num, grad_an):
+        """Computes absolute difference between numerical and analytical gradient
+        """
+        diff = np.sum(np.abs(np.subtract(grad_an, grad_num)))
+        diff /= np.sum(np.add(np.abs(grad_an), np.abs(grad_num)))
+        return diff
+
+    def ComputeGradsNum(self, X, Y, V, U, W, b, c, h = 1e-5):
+
+        # V
+        dL_dV = np.zeros(V.shape)
+        for i in range(V.shape[0]):
+            for j in range(V.shape[1]):
+                V_try = np.array(V)
+                V_try[i, j] -= h
+
+                _,_,_, P =  self.forward(X, V_try, self.U,
+                                self.W, self.b, self.c)
+
+                c1 = self.loss(Y, P)
+
+                V_try = np.array(V)
+                V_try[i, j] += h
+
+                _,_,_, P =  self.forward(X, V_try, self.U,
+                                self.W, self.b, self.c)
+
+                c2 = self.loss(Y, P)
+
+                dL_dV[i,j] = (c2 - c1) / (2 * h)
+
+        # U
+        dL_dU = np.zeros(U.shape)
+        for i in range(U.shape[0]):
+            for j in range(U.shape[1]):
+                U_try = np.array(U)
+                U_try[i, j] -= h
+
+                _,_,_, P =  self.forward(X, self.V, U_try,
+                                self.W, self.b, self.c)
+
+                c1 = self.loss(Y, P)
+
+                U_try = np.array(U)
+                U_try[i, j] += h
+
+                _,_,_, P =  self.forward(X, self.V, U_try,
+                                self.W, self.b, self.c)
+
+                c2 = self.loss(Y, P)
+
+                dL_dU[i,j] = (c2 - c1) / (2 * h)
+
+        # W
+        dL_dW = np.zeros(W.shape)
+        for i in range(W.shape[0]):
+            for j in range(W.shape[1]):
+                W_try = np.array(W)
+                W_try[i, j] -= h
+
+                _,_,_, P =  self.forward(X, self.V, self.U,
+                                W_try, self.b, self.c)
+
+                c1 = self.loss(Y, P)
+
+                W_try = np.array(W)
+                W_try[i, j] += h
+
+                _,_,_, P =  self.forward(X, self.V, self.U,
+                                W_try, self.b, self.c)
+
+                c2 = self.loss(Y, P)
+
+                dL_dW[i,j] = (c2 - c1) / (2 * h)
+
+        # b
+        dL_db = np.zeros(b.shape)
+        for i in range(b.size):
+            b_try = np.array(b)
+            b_try[i] -= h
+
+            _,_,_, P =  self.forward(X, self.V, self.U,
+                            self.W, b_try, self.c)
+
+            c1 = self.loss(Y, P)
+
+            b_try = np.array(b)
+            b_try[i] += h
+
+            _,_,_, P =  self.forward(X, self.V, self.U,
+                            self.W, b_try, self.c)
+
+            c2 = self.loss(Y, P)
+
+            dL_db[i] = (c2 - c1) / (2 * h)
+
+        # c
+        dL_dc = np.zeros(c.shape)
+        for i in range(c.size):
+            c_try = np.array(c)
+            c_try[i] -= h
+
+            _,_,_, P =  self.forward(X, self.V, self.U,
+                            self.W, self.b, c_try)
+
+            c1 = self.loss(Y, P)
+
+            c_try = np.array(c)
+            c_try[i] += h
+
+            _,_,_, P =  self.forward(X, self.V, self.U,
+                            self.W, self.b, c_try)
+
+            c2 = self.loss(Y, P)
+
+            dL_dc[i] = (c2 - c1) / (2 * h)
+
+        return dL_dV, dL_dU, dL_dW, dL_db, dL_dc
+
+    def AnalyzeGradients(self, X, Y):
+
+        dL_dV_num, dL_dU_num, dL_dW_num, dL_db_num, dL_dc_num = self.ComputeGradsNum(
+        X, Y, self.V, self.U, self.W, self.b, self.c
+        )
+
+        a_t, h_t, o_t, p_t = self.forward(X, self.V, self.U, self.W,
+                                          self.b, self.c)
+
+        dL_dV_an, dL_dU_an, dL_dW_an, dL_db_an, dL_dc_an = self.backward(
+        X, Y, h_t
+        )
+
+        V_d = self.NumericalVSAnalytic(dL_dV_num, dL_dV_an)
+        U_d = self.NumericalVSAnalytic(dL_dU_num, dL_dU_an)
+        W_d = self.NumericalVSAnalytic(dL_dW_num, dL_dW_an)
+        b_d = self.NumericalVSAnalytic(dL_db_num, dL_db_an)
+        c_d = self.NumericalVSAnalytic(dL_dc_num, dL_dc_an)
+
+        print(" =-=-=-=- Numerical vs Analytic gradients -=-=-=-= ")
+        print(" =-=- V: ", V_d)
+        print(" =-=- U: ", U_d)
+        print(" =-=- W: ", W_d)
+        print(" =-=- b: ", b_d)
+        print(" =-=- c: ", c_d)
+        print(" =-=-=-=- @ -=-=-=-= ")
 
     def fit(self, data, params):
 
@@ -101,6 +257,7 @@ class VRNN:
         ##  Initialize weights and
         ##  biases
         ##
+        np.random.seed(400)
         self.U = np.random.randn(m, K) * sig
         self.W = np.random.randn(m, m) * sig
         self.V = np.random.randn(K, m) * sig
@@ -112,15 +269,21 @@ class VRNN:
         ##
         self.h_t_1 = np.zeros((m,1))
 
-        ##
-        ##  Forward pass
-        ##
-        X_train = X[:, e:e+seq_length]
-        Y_train = X[:, e + 1 :e + 1 +seq_length]
-        a_t, h_t, o_t, p_t = self.forward(X_train)
-        loss = self.loss(Y_train, p_t)
+        ## Analyze gradients
+        self.AnalyzeGradients(X[:, 0:5], X[:, 1:6])
 
         print(' =-=-=-=- Network parameters -=-=-=-= ')
         print(' =- epochs: ', epochs, ' learning_rate: ', eta)
         print(' =- hidden_units: ', m, ' seq_length: ', seq_length)
         print(' =-=-=-=- Starting training -=-=-=-= \n')
+
+        """ Training
+        for epoch in range(epochs):
+            for itr in range(X.shape[1] - seq_length - 1):
+                X_train = X[:, e:e+seq_length]
+                Y_train = X[:, e + 1 :e + 1 +seq_length]
+
+            print('Epoch: ', epoch)
+
+        print('=-=- Training Completed -=-=')
+        """

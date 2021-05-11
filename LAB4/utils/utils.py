@@ -2,6 +2,7 @@
 __author__ = 'Majd Jamal'
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Params:
 
@@ -21,3 +22,16 @@ def softmax(x):
 def tanh(x):
     """ Standard definition of the tanH function """
     return np.sinh(x) / np.cosh(x)
+
+def plotter(step, val):
+    """ Plots validation loss from a training session.
+    :param step: update steps
+    :param val: validation loss
+    """
+    plt.style.use('seaborn')
+    plt.plot(step, train, color = 'red', label = 'Validation Loss')
+    plt.xlabel('Update step')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig('utils/results/loss')
+    plt.close()
