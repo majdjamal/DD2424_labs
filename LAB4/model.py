@@ -39,13 +39,13 @@ class VRNN:
         """
 
         a_t = W @ self.h_t_1 + U@X + b
-        h_t = tanh(a_t)
-        o_t = V@h_t + c
-        p_t = softmax(o_t)
+        H = tanh(a_t)
+        O = V@H + c
+        P = softmax(O)
 
-        return a_t, h_t, o_t, p_t
+        return a_t, H, O, P
 
-    def backward(self, Y, P, h_t):
+    def backward(self, X, Y, P, H, a_t):
         """
         ##  TODO: Write backward pass with instructions
         ##  from lecture 9. Solve the gradient for the bias terms.
@@ -53,14 +53,57 @@ class VRNN:
         """
 
         _, Npts = Y.shape
+        dL_dU, dL_dW, dL_db = 0,0,0
 
-        G = - (Y - P)
+        G = - (Y - P) # dL_do
 
-        dL_dV = G @ h_t.T
+        dL_dV = G @ H.T * (1/Npts)
 
         dL_dc = G @ np.ones((Npts, 1)) * (1/Npts)
 
-        dL_dU, dL_dW, dL_db = 0,0,0
+        #"""
+
+        new_G = 0
+        prev_a_T = 0
+        dL_dh = 0
+
+
+        for i in range(Npts-1, -1, -1):
+
+            g = G[:, i].reshape(-1,1)
+
+
+            if i == Npts - 1:
+
+                dL_dh = self.V.T @ g    # EQ: dL_do * V
+
+                #prev_a_T = diag.T @ prev_a_T  # EQ: dL_do
+                new_G = dL_dh
+
+            else:
+                diag = np.diag(1 - np.square(np.tanh(a_t[:, i + 1])))
+                dL_dh = self.V.T @ g + self.W.T @ (diag.T @ dL_dh)# EQ: dL_do * V + dL_da_{t+1} * W
+                #prev_a_T = diag.T @ dL_dh
+
+                new_G = np.hstack((new_G, dL_dh))
+
+        G = new_G
+        #G = np.fliplr(new_G)
+
+        # dh = g @ V + da_prev @ W
+        # da = dh * diag
+        #"""
+
+        #G = self.V.T @ G    #dL_dh
+        #print(G.shape)
+
+        #G = G * np.diag(1 - np.square(np.tanh(a_t))) #dL_dat
+
+        dL_db = G @ np.ones((Npts, 1)) * (1/Npts)
+
+        dL_dW = G @ self.h_t_1.T * (1/Npts)
+        dL_dU = G @ X.T * (1/Npts)
+        #"""
 
         return dL_dV, dL_dU, dL_dW, dL_db, dL_dc
 
@@ -97,7 +140,7 @@ class VRNN:
         diff /= np.sum(np.add(np.abs(grad_an), np.abs(grad_num)))
         return diff
 
-    def ComputeGradsNum(self, X, Y, V, U, W, b, c, h = 1e-5):
+    def ComputeGradsNum(self, X, Y, V, U, W, b, c, h = 1e-4):
 
         # V
         dL_dV = np.zeros(V.shape)
@@ -180,10 +223,17 @@ class VRNN:
         X, self.V, self.U, self.W, self.b, self.c)
 
         dL_dV_an, dL_dU_an, dL_dW_an, dL_db_an, dL_dc_an = self.backward(
-        X, Y, h_t
+        X, Y, p_t, h_t, a_t
         )
 
-        print(dL_dV_num, '\n'*2, dL_dV_an)
+        """
+        print('*')
+        print(dL_db_num)
+        print('*')
+        print('\n'*2)
+        print('*')
+        print(dL_db_an)
+        """
 
         V_d = self.NumericalVSAnalytic(dL_dV_num, dL_dV_an)
         U_d = self.NumericalVSAnalytic(dL_dU_num, dL_dU_an)
@@ -235,10 +285,11 @@ class VRNN:
         ##
         ##  Initializing hidden states
         ##
-        self.h_t_1 = np.zeros((m,1))
+        #self.h_t_1 = np.zeros((m,1))
+        self.h_t_1 = np.random.randn(m,seq_length - 10)
 
         ## Analyze gradients
-        self.AnalyzeGradients(X[:, 0].reshape(-1,1), X[:, 1].reshape(-1,1))
+        self.AnalyzeGradients(X[:, 0:seq_length - 10], X[:, 1:1 + seq_length - 10])
 
         print(' =-=-=-=- Network parameters -=-=-=-= ')
         print(' =- epochs: ', epochs, ' learning_rate: ', eta)
