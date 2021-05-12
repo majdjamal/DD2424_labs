@@ -38,9 +38,9 @@ class VRNN:
                     shape = (K, Npts)
         """
 
-        a_t = self.W @ self.h_t_1 + self.U@X + self.b
+        a_t = W @ self.h_t_1 + U@X + b
         h_t = tanh(a_t)
-        o_t = self.V@h_t + self.c
+        o_t = V@h_t + c
         p_t = softmax(o_t)
 
         return a_t, h_t, o_t, p_t
@@ -52,11 +52,15 @@ class VRNN:
         ##
         """
 
+        _, Npts = Y.shape
+
         G = - (Y - P)
 
-        dL_dV = self.h_t_1 @ G
+        dL_dV = G @ h_t.T
 
-        dL_dV, dL_dU, dL_dW, dL_db, dL_dc = 0,0,0,0,0
+        dL_dc = G @ np.ones((Npts, 1)) * (1/Npts)
+
+        dL_dU, dL_dW, dL_db = 0,0,0
 
         return dL_dV, dL_dU, dL_dW, dL_db, dL_dc
 
@@ -75,9 +79,10 @@ class VRNN:
         self.b -= eta/np.sqrt(m_b) * dL_db
         self.c -= eta/np.sqrt(m_c) * dL_dc
 
-    def loss(self, Y, P):
+    def loss(self, X, Y, V, U, W, b, c):
         """ Computes loss
         """
+        _,_,_, P = self.forward(X, V, U, W, b, c)
         return np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P)))
 
     def getLoss(self):
@@ -98,21 +103,14 @@ class VRNN:
         dL_dV = np.zeros(V.shape)
         for i in range(V.shape[0]):
             for j in range(V.shape[1]):
+
                 V_try = np.array(V)
                 V_try[i, j] -= h
-
-                _,_,_, P =  self.forward(X, V_try, self.U,
-                                self.W, self.b, self.c)
-
-                c1 = self.loss(Y, P)
+                c1 = self.loss(X, Y, V_try, U, W, b, c)
 
                 V_try = np.array(V)
                 V_try[i, j] += h
-
-                _,_,_, P =  self.forward(X, V_try, self.U,
-                                self.W, self.b, self.c)
-
-                c2 = self.loss(Y, P)
+                c2 = self.loss(X, Y, V_try, U, W, b, c)
 
                 dL_dV[i,j] = (c2 - c1) / (2 * h)
 
@@ -122,19 +120,11 @@ class VRNN:
             for j in range(U.shape[1]):
                 U_try = np.array(U)
                 U_try[i, j] -= h
-
-                _,_,_, P =  self.forward(X, self.V, U_try,
-                                self.W, self.b, self.c)
-
-                c1 = self.loss(Y, P)
+                c1 = self.loss(X, Y, V, U_try, W, b, c)
 
                 U_try = np.array(U)
                 U_try[i, j] += h
-
-                _,_,_, P =  self.forward(X, self.V, U_try,
-                                self.W, self.b, self.c)
-
-                c2 = self.loss(Y, P)
+                c2 = self.loss(X, Y, V, U_try, W, b, c)
 
                 dL_dU[i,j] = (c2 - c1) / (2 * h)
 
@@ -144,19 +134,11 @@ class VRNN:
             for j in range(W.shape[1]):
                 W_try = np.array(W)
                 W_try[i, j] -= h
-
-                _,_,_, P =  self.forward(X, self.V, self.U,
-                                W_try, self.b, self.c)
-
-                c1 = self.loss(Y, P)
+                c1 = self.loss(X, Y, V, U, W_try, b, c)
 
                 W_try = np.array(W)
                 W_try[i, j] += h
-
-                _,_,_, P =  self.forward(X, self.V, self.U,
-                                W_try, self.b, self.c)
-
-                c2 = self.loss(Y, P)
+                c2 = self.loss(X, Y, V, U, W_try, b, c)
 
                 dL_dW[i,j] = (c2 - c1) / (2 * h)
 
@@ -165,19 +147,11 @@ class VRNN:
         for i in range(b.size):
             b_try = np.array(b)
             b_try[i] -= h
-
-            _,_,_, P =  self.forward(X, self.V, self.U,
-                            self.W, b_try, self.c)
-
-            c1 = self.loss(Y, P)
+            c1 = self.loss(X, Y, V, U, W, b_try, c)
 
             b_try = np.array(b)
             b_try[i] += h
-
-            _,_,_, P =  self.forward(X, self.V, self.U,
-                            self.W, b_try, self.c)
-
-            c2 = self.loss(Y, P)
+            c2 = self.loss(X, Y, V, U, W, b_try, c)
 
             dL_db[i] = (c2 - c1) / (2 * h)
 
@@ -186,19 +160,11 @@ class VRNN:
         for i in range(c.size):
             c_try = np.array(c)
             c_try[i] -= h
-
-            _,_,_, P =  self.forward(X, self.V, self.U,
-                            self.W, self.b, c_try)
-
-            c1 = self.loss(Y, P)
+            c1 = self.loss(X, Y, V, U, W, b, c_try)
 
             c_try = np.array(c)
             c_try[i] += h
-
-            _,_,_, P =  self.forward(X, self.V, self.U,
-                            self.W, self.b, c_try)
-
-            c2 = self.loss(Y, P)
+            c2 = self.loss(X, Y, V, U, W, b, c_try)
 
             dL_dc[i] = (c2 - c1) / (2 * h)
 
@@ -210,12 +176,14 @@ class VRNN:
         X, Y, self.V, self.U, self.W, self.b, self.c
         )
 
-        a_t, h_t, o_t, p_t = self.forward(X, self.V, self.U, self.W,
-                                          self.b, self.c)
+        a_t, h_t, o_t, p_t = self.forward(
+        X, self.V, self.U, self.W, self.b, self.c)
 
         dL_dV_an, dL_dU_an, dL_dW_an, dL_db_an, dL_dc_an = self.backward(
         X, Y, h_t
         )
+
+        print(dL_dV_num, '\n'*2, dL_dV_an)
 
         V_d = self.NumericalVSAnalytic(dL_dV_num, dL_dV_an)
         U_d = self.NumericalVSAnalytic(dL_dU_num, dL_dU_an)
@@ -257,7 +225,7 @@ class VRNN:
         ##  Initialize weights and
         ##  biases
         ##
-        np.random.seed(400)
+        #np.random.seed(400)
         self.U = np.random.randn(m, K) * sig
         self.W = np.random.randn(m, m) * sig
         self.V = np.random.randn(K, m) * sig
@@ -270,7 +238,7 @@ class VRNN:
         self.h_t_1 = np.zeros((m,1))
 
         ## Analyze gradients
-        self.AnalyzeGradients(X[:, 0:5], X[:, 1:6])
+        self.AnalyzeGradients(X[:, 0].reshape(-1,1), X[:, 1].reshape(-1,1))
 
         print(' =-=-=-=- Network parameters -=-=-=-= ')
         print(' =- epochs: ', epochs, ' learning_rate: ', eta)
