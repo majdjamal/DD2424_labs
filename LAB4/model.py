@@ -16,7 +16,7 @@ class VRNN:
         self.b = None
         self.c = None
 
-        self.h_t_1 = None
+        self.H_minus = None # h_{t - 1}
         self.h_t = None
 
         self.char_to_ind = None
@@ -38,7 +38,7 @@ class VRNN:
                     shape = (K, Npts)
         """
 
-        a_t = W @ self.h_t_1 + U@X + b
+        a_t = W @ self.H_minus + U@X + b
         H = tanh(a_t)
         O = V@H + c
         P = softmax(O)
@@ -53,6 +53,7 @@ class VRNN:
         """
 
         _, Npts = Y.shape
+        m, _ = H.shape
         dL_dU, dL_dW, dL_db = 0,0,0
 
         G = - (Y - P) # dL_do
@@ -61,48 +62,40 @@ class VRNN:
 
         dL_dc = G @ np.ones((Npts, 1)) * (1/Npts)
 
-        #"""
 
-        new_G = 0
-        prev_a_T = 0
-        dL_dh = 0
+        A = np.zeros((m, Npts))     # dL_da
 
+        for i in range(Npts - 1, -1, -1):
 
-        for i in range(Npts-1, -1, -1):
-
-            g = G[:, i].reshape(-1,1)
-
+            g = G[:, i] # dL_do
+            a = a_t[:, i]
+            diag = np.diag(1 - np.tanh(a)**2)
 
             if i == Npts - 1:
-
-                dL_dh = self.V.T @ g    # EQ: dL_do * V
-
-                #prev_a_T = diag.T @ prev_a_T  # EQ: dL_do
-                new_G = dL_dh
+                print(self.V.shape)
+                print(g.shape)
+                dL_dh = self.V.T @ g
+                dL_da = diag @ dL_dh
+                #dL_da = dL_dh.T @ diag.T
 
             else:
-                diag = np.diag(1 - np.square(np.tanh(a_t[:, i + 1])))
-                dL_dh = self.V.T @ g + self.W.T @ (diag.T @ dL_dh)# EQ: dL_do * V + dL_da_{t+1} * W
-                #prev_a_T = diag.T @ dL_dh
+                a_plus = A[:, i + 1]   #dL_da_{t + 1}
 
-                new_G = np.hstack((new_G, dL_dh))
+                v_term = self.V.T @ g
+                w_term = self.W.T @ a_plus
+                dL_dh = v_term + w_term
 
-        G = new_G
-        #G = np.fliplr(new_G)
+                dL_da = diag @ dL_dh
+                #dL_da = dL_dh.T @ diag.T
 
-        # dh = g @ V + da_prev @ W
-        # da = dh * diag
-        #"""
+            A[:, i] = dL_da
 
-        #G = self.V.T @ G    #dL_dh
-        #print(G.shape)
+        G = A
 
-        #G = G * np.diag(1 - np.square(np.tanh(a_t))) #dL_dat
-
+        dL_dW = G @ self.H_minus.T * (1/Npts)   # H_minus is h_{t - 1}
+        dL_dU = G @ X.T * (1/Npts)
         dL_db = G @ np.ones((Npts, 1)) * (1/Npts)
 
-        dL_dW = G @ self.h_t_1.T * (1/Npts)
-        dL_dU = G @ X.T * (1/Npts)
         #"""
 
         return dL_dV, dL_dU, dL_dW, dL_db, dL_dc
@@ -228,11 +221,11 @@ class VRNN:
 
         """
         print('*')
-        print(dL_db_num)
+        print(dL_dU_num)
         print('*')
         print('\n'*2)
         print('*')
-        print(dL_db_an)
+        print(dL_dU_an)
         """
 
         V_d = self.NumericalVSAnalytic(dL_dV_num, dL_dV_an)
@@ -248,6 +241,48 @@ class VRNN:
         print(" =-=- b: ", b_d)
         print(" =-=- c: ", c_d)
         print(" =-=-=-=- @ -=-=-=-= ")
+
+    def synthesize(self, h0, x0, n):
+        """ Synthesize a sentence based on the network weights
+        :param h0: initial hidden state, shape = (m,1)
+        :param x0: dummy input, shape = (Ndim, 1)
+        :param n: length of synthesized sequence, const
+        :return X_syn: syntesized text in matrix form, shape = (Ndim, Npts)
+        :return text_syn: synthesized text, string
+        """
+        x0 = np.atleast_2d(x0).T
+
+        Ndim, _ = x0.shape
+        X_syn = np.zeros((Ndim, n))
+
+        curr_char = x0
+        text_syn = ''
+
+        for itr in range(n):
+
+            if itr == 0:
+                vec = x0
+                max_ind = np.argmax(vec, axis=0)[0]
+            else:
+                _,H,_, P = self.forward(curr_char,
+                self.V, self.U, self.W, self.b, self.c)
+                vec = np.zeros(P.shape)
+
+                max_ind = np.random.choice(Ndim, 1, p=P[:,0])[0]
+
+                vec[max_ind] = 1
+                curr_char = vec
+                self.H_minus = H
+
+            # Add vector representation of the character in X_syn
+            X_syn[:, itr] = vec[:, 0]
+
+            # Add char to text
+            char = self.ind_to_char.item().get(max_ind)
+            text_syn += char
+
+        print(text_syn)
+        return text_syn, X_syn
 
     def fit(self, data, params):
 
@@ -285,11 +320,12 @@ class VRNN:
         ##
         ##  Initializing hidden states
         ##
-        #self.h_t_1 = np.zeros((m,1))
-        self.h_t_1 = np.random.randn(m,seq_length - 10)
+        #self.H_minus = np.zeros((m,seq_length - 10))
+        self.H_minus = np.random.randn(m,1)
 
         ## Analyze gradients
-        self.AnalyzeGradients(X[:, 0:seq_length - 10], X[:, 1:1 + seq_length - 10])
+        #self.AnalyzeGradients(X[:, 0:seq_length - 10], X[:, 1: 1 + seq_length - 10])
+        self.synthesize(self.H_minus, X[:, 0], 100)
 
         print(' =-=-=-=- Network parameters -=-=-=-= ')
         print(' =- epochs: ', epochs, ' learning_rate: ', eta)
