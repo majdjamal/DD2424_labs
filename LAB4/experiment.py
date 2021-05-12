@@ -3,13 +3,15 @@ __author__ = 'Majd Jamal'
 
 import numpy as np
 from data.getData import getData
-from utils.utils import Params
+from utils.utils import Params, plotter
 from model import VRNN
 
 data = getData()
 params = Params(
-    m = 100, seq_length = 25, eta = 0.1, sig = 0.1, epochs = 2
+    m = 100, seq_length = 25, eta = 0.1, sig = 0.1, epochs = 1
     )
 
 vrnn = VRNN()
 vrnn.fit(data, params)
+#loss = vrnn.getLoss()
+#plotter(loss[0], loss[1])

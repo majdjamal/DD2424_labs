@@ -24,7 +24,7 @@ class VRNN:
 
         self.AdaGradTerm = {}
 
-        self.lossData = [[],[],[]] # [step, train_loss, val_loss]
+        self.lossData = [[],[]] # [step, train_loss, val_loss]
 
     def forward(self, X, V, U, W, b, c):
         """ Computes the forward pass with
@@ -58,9 +58,9 @@ class VRNN:
 
         G = - (Y - P) # dL_do
 
-        dL_dV = G @ H.T * (1/Npts)
+        dL_dV = G @ H.T
 
-        dL_dc = G @ np.ones((Npts, 1)) * (1/Npts)
+        dL_dc = G @ np.ones((Npts, 1))
 
 
         A = np.zeros((m, Npts))     # dL_da
@@ -72,11 +72,8 @@ class VRNN:
             diag = np.diag(1 - np.tanh(a)**2)
 
             if i == Npts - 1:
-                print(self.V.shape)
-                print(g.shape)
                 dL_dh = self.V.T @ g
-                dL_da = diag @ dL_dh
-                #dL_da = dL_dh.T @ diag.T
+                dL_da = diag.T @ dL_dh
 
             else:
                 a_plus = A[:, i + 1]   #dL_da_{t + 1}
@@ -85,16 +82,15 @@ class VRNN:
                 w_term = self.W.T @ a_plus
                 dL_dh = v_term + w_term
 
-                dL_da = diag @ dL_dh
-                #dL_da = dL_dh.T @ diag.T
+                dL_da = diag.T @ dL_dh
 
             A[:, i] = dL_da
 
         G = A
 
-        dL_dW = G @ self.H_minus.T * (1/Npts)   # H_minus is h_{t - 1}
-        dL_dU = G @ X.T * (1/Npts)
-        dL_db = G @ np.ones((Npts, 1)) * (1/Npts)
+        dL_dW = G @ self.H_minus.T    # H_minus is h_{t - 1}
+        dL_dU = G @ X.T
+        dL_db = G @ np.ones((Npts, 1))
 
         #"""
 
@@ -102,24 +98,30 @@ class VRNN:
 
     def update(self, dL_dV, dL_dU, dL_dW, dL_db, dL_dc, eta, eps = 1e-8):
 
-        m_V = self.AdaGradTerm['V'] + np.square(dL_dV) + eps
-        m_U = self.AdaGradTerm['U'] + np.square(dL_dU) + eps
-        m_W = self.AdaGradTerm['W'] + np.square(dL_dW) + eps
-        m_b = self.AdaGradTerm['b'] + np.square(dL_db) + eps
-        m_c = self.AdaGradTerm['c'] + np.square(dL_dc) + eps
+        m_V = self.AdaGradTerm['V'] + np.square(dL_dV)
+        m_U = self.AdaGradTerm['U'] + np.square(dL_dU)
+        m_W = self.AdaGradTerm['W'] + np.square(dL_dW)
+        m_b = self.AdaGradTerm['b'] + np.square(dL_db)
+        m_c = self.AdaGradTerm['c'] + np.square(dL_dc)
 
-        self.V -= eta/np.sqrt(m_V) * dL_dV
-        self.U -= eta/np.sqrt(m_U) * dL_dV
-        self.W -= eta/np.sqrt(m_W) * dL_dV
+        self.AdaGradTerm['V'] = m_V
+        self.AdaGradTerm['U'] = m_U
+        self.AdaGradTerm['W'] = m_W
+        self.AdaGradTerm['b'] = m_b
+        self.AdaGradTerm['c'] = m_c
 
-        self.b -= eta/np.sqrt(m_b) * dL_db
-        self.c -= eta/np.sqrt(m_c) * dL_dc
+        self.V -= eta/np.sqrt(m_V + eps) * dL_dV
+        self.U -= eta/np.sqrt(m_U + eps) * dL_dU
+        self.W -= eta/np.sqrt(m_W + eps) * dL_dW
+
+        self.b -= eta/np.sqrt(m_b + eps) * dL_db
+        self.c -= eta/np.sqrt(m_c + eps) * dL_dc
 
     def loss(self, X, Y, V, U, W, b, c):
         """ Computes loss
         """
         _,_,_, P = self.forward(X, V, U, W, b, c)
-        return np.mean(-np.log(np.einsum('ij,ji->i', Y.T, P)))
+        return np.sum(-np.log(np.einsum('ij,ji->i', Y.T, P)))
 
     def getLoss(self):
         """ Returns loss from the training
@@ -268,7 +270,7 @@ class VRNN:
                 self.V, self.U, self.W, self.b, self.c)
                 vec = np.zeros(P.shape)
 
-                max_ind = np.random.choice(Ndim, 1, p=P[:,0])[0]
+                max_ind = np.random.choice(Ndim, 1, p=P[:,0])[0] # Sample randomly from P
 
                 vec[max_ind] = 1
                 curr_char = vec
@@ -281,7 +283,7 @@ class VRNN:
             char = self.ind_to_char.item().get(max_ind)
             text_syn += char
 
-        print(text_syn)
+        #print(text_syn)
         return text_syn, X_syn
 
     def fit(self, data, params):
@@ -321,24 +323,58 @@ class VRNN:
         ##  Initializing hidden states
         ##
         #self.H_minus = np.zeros((m,seq_length - 10))
-        self.H_minus = np.random.randn(m,1)
+        self.H_minus = np.random.randn(m,seq_length - 10)
+
+        ##
+        ##  AdaGrad initialization
+        ##
+        self.AdaGradTerm['V'] = 0
+        self.AdaGradTerm['U'] = 0
+        self.AdaGradTerm['W'] = 0
+        self.AdaGradTerm['b'] = 0
+        self.AdaGradTerm['c'] = 0
 
         ## Analyze gradients
-        #self.AnalyzeGradients(X[:, 0:seq_length - 10], X[:, 1: 1 + seq_length - 10])
-        self.synthesize(self.H_minus, X[:, 0], 100)
+        self.AnalyzeGradients(X[:, 0:seq_length - 10], X[:, 1: 1 + seq_length - 10])
+        #self.synthesize(self.H_minus, X[:, 0], 100)
 
         print(' =-=-=-=- Network parameters -=-=-=-= ')
         print(' =- epochs: ', epochs, ' learning_rate: ', eta)
         print(' =- hidden_units: ', m, ' seq_length: ', seq_length)
         print(' =-=-=-=- Starting training -=-=-=-= \n')
-
         """ Training
+
+        self.H_minus = np.zeros((m,seq_length))
+        smooth_loss = 0
         for epoch in range(epochs):
             for itr in range(X.shape[1] - seq_length - 1):
+
                 X_train = X[:, e:e+seq_length]
                 Y_train = X[:, e + 1 :e + 1 +seq_length]
+
+                a_t, H, O, P = self.forward(X_train,
+                self.V, self.U, self.W, self.b, self.c)
+                self.H_minus = H
+                gradients = self.backward(X_train, Y_train, P, H, a_t)
+
+                self.update(*gradients, eta)
+                c = self.loss(X_train, Y_train,
+                self.V, self.U, self.W, self.b, self.c)
+                smooth_loss = smooth_loss*0.999 + 0.001 * c
+
+                if itr % 100 == 0:
+                    self.lossData[0].append(itr)
+                    self.lossData[1].append(smooth_loss)
+
+                    print('iter: ', itr,'    loss: ', smooth_loss)
+                    #print(itr)
+
+                e += 1
+
+            e = 0
+            self.H_minus = np.zeros((m,seq_length))
 
             print('Epoch: ', epoch)
 
         print('=-=- Training Completed -=-=')
-        """
+        #"""

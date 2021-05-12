@@ -23,7 +23,7 @@ def tanh(x):
     """ Standard definition of the tanH function """
     return np.sinh(x) / np.cosh(x)
 
-def plotter(step, val):
+def plotter(step, train):
     """ Plots validation loss from a training session.
     :param step: update steps
     :param val: validation loss
