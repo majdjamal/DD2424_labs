@@ -1,13 +1,15 @@
 
 __author__ = 'Majd Jamal'
 
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 class Params:
 
     def __init__(self, m, seq_length, eta, sig, epochs):
-
+        """ Object to store hyperparamters
+        """
         self.m = m # hidden units
         self.seq_length = seq_length
         self.eta = eta  # learning rate
@@ -29,9 +31,9 @@ def plotter(step, train):
     :param val: validation loss
     """
     plt.style.use('seaborn')
-    plt.plot(step, train, color = 'red', label = 'Validation Loss')
+    plt.plot(step, train, color = 'red', label = 'Smooth Loss')
     plt.xlabel('Update step')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig('utils/results/loss')
+    plt.savefig('results/loss')
     plt.close()

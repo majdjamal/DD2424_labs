@@ -2,7 +2,112 @@
 __author__ = 'Majd Jamal'
 
 import numpy as np
-from utils.utils import tanh, softmax
+
+
+
+#=-=-=-=-=-=-=-=
+# Data loading
+#=-=-=-=-=-=-=-=
+
+book_data = open('goblet_book.txt', 'r').read()
+unique = Counter(book_data)
+chars = unique.items()
+chars = list(unique.keys())
+NUnique = len(chars)
+
+char_to_ind = {}
+ind_to_char = {}
+
+X = np.zeros((NUnique, len(book_data)))
+print(chars)
+for i in range(len(chars)):
+    vec = np.zeros((NUnique, 1))
+    char = chars[i]
+
+    vec[i] = 1
+
+    char_to_ind[char] = vec
+    ind_to_char[i] = char
+
+for i in range(len(book_data)):
+    char = book_data[i]
+    vec = char_to_ind[char]
+
+    X[:, i] = vec[:,0]
+
+np.save('processed/book_data.npy', book_data)
+np.save('processed/X.npy', X)
+np.save('processed/ind_to_char.npy', ind_to_char)
+np.save('processed/char_to_ind.npy', char_to_ind)
+np.save('processed/NUnique.npy', NUnique)
+
+
+#=-=-=-=-=-=-=-=
+# Utils
+#=-=-=-=-=-=-=-=
+
+class Data:
+
+    def __init__(self, book_data, X, ind_to_char, char_to_ind, NUnique):
+        """ Object to store data
+        """
+        self.book_data = book_data
+        self.X = X
+        self.ind_to_char = ind_to_char
+        self.char_to_ind = char_to_ind
+        self.NUnique = NUnique
+
+class Params:
+
+    def __init__(self, m, seq_length, eta, sig, epochs):
+        """ Object to store hyperparamters
+        """
+        self.m = m # hidden units
+        self.seq_length = seq_length
+        self.eta = eta  # learning rate
+        self.sig = sig  # variance when initializing weights
+        self.epochs = epochs
+
+
+def getData():
+
+    book_data = np.load('data/processed/book_data.npy')
+    X = np.load('data/processed/X.npy')
+    ind_to_char = np.load('data/processed/ind_to_char.npy', allow_pickle=True)
+    char_to_ind = np.load('data/processed/char_to_ind.npy', allow_pickle=True)
+    NUnique = np.load('data/processed/NUnique.npy')
+
+    data = Data(book_data, X, ind_to_char, char_to_ind, NUnique)
+
+    return data
+
+
+def softmax(x):
+    """ Standard definition of the softmax function """
+    e_x = np.exp(x - np.max(x))
+    return e_x / np.sum(e_x, axis=0)
+
+def tanh(x):
+    """ Standard definition of the tanH function """
+    return np.sinh(x) / np.cosh(x)
+
+def plotter(step, train):
+    """ Plots validation loss from a training session.
+    :param step: update steps
+    :param val: validation loss
+    """
+    plt.style.use('seaborn')
+    plt.plot(step, train, color = 'red', label = 'Smooth Loss')
+    plt.xlabel('Update step')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig('results/loss')
+    plt.close()
+
+
+#=-=-=-=-=-=-=-=
+# Model
+#=-=-=-=-=-=-=-=
 
 class VRNN:
     """ Vanilla Recurrent Neural Network
@@ -42,15 +147,15 @@ class VRNN:
 
         a = W @ h0 + U @ X + b
         h = tanh(a)
-        o = V @ H + c
+        o = V @ h + c
         p = softmax(o)
 
         return a, h, o, p
 
     #[H0, A, H, P]
-    def train(self, word, V, U, W, b, c):
+    def train(self, X, V, U, W, b, c, h0):
         """ Trains the network with a sequence of data points
-        :param word: characters, shape = (K, seq_lenght)
+        :param X: characters, shape = (K, seq_lenght)
         :param V: Weights in the output layer, shape = (K, m)
         :param U: Second Weights in the input layer, shape = (m, K)
         :param W: First Weights in the input layer, shape = (m, m)
@@ -62,14 +167,12 @@ class VRNN:
         :return P: normalized probabilites
         """
         m, _ = self.W.shape
-        K, Npts = word.shape
+        K, Npts = X.shape
 
         H0 = np.zeros((m, Npts))    #Initial hidden states
         H = np.zeros((m, Npts))     #Hidden states after one pass
         A = np.zeros((m, Npts))     #One pass values
         P = np.zeros((K, Npts))     #Normalized output probabilities
-
-        h0 = H0[:, 0].reshape(-1,1)
 
         for itr in range(Npts):
             x = X[:, itr].reshape(-1,1) #char
@@ -77,10 +180,10 @@ class VRNN:
             a, h, o, p = self.forward(x, h0,
                 V, U, W, b, c)
 
-            H0[:, i] = h0[:, 0]
-            A[:, i] = a[:, 0]
-            H[:, i] = h[:, 0]
-            P[:, i] = p[:, 0]
+            H0[:, itr] = h0[:, 0]
+            A[:, itr] = a[:, 0]
+            H[:, itr] = h[:, 0]
+            P[:, itr] = p[:, 0]
 
             h0 = h
 
@@ -118,33 +221,42 @@ class VRNN:
 
         G = - (Y - P)
 
-        dV = G @ H.T
+        dV = G @ H.T
         dc = G @ np.ones((Npts, 1))
 
         G_da = np.zeros((m, Npts))
 
-        for t in reverse(Npts - 1):
+        for t in range(Npts - 1, -1, -1):
 
-            g = G[:, t].reshape(-1,1)
-            a_t = A[:, t].reshape(-1,1)
+            g = G[:, t]
+            a_t = A[:, t]
             tanhD = np.diag(1 -  np.square(np.tanh(a_t)))
 
-            if i == Npts - 1:
+            if t == Npts - 1:
                 dh = self.V.T @ g
             else:
                 g_da = G_da[:, t + 1]
-                dh = self.V.T @ g + self.W.T @ a_plus
+                dh = self.V.T @g + self.W.T @ g_da
 
-            da = tanhD @ dh
+            da = tanhD.T @ dh
             G_da[:, t] = da
 
         G = G_da
 
-        dW = G @ H0.T
-        dU = G @ X.T
-        db = G @ np.ones((Npts, 1))
+        dW = G @H0.T
+        dU = G @X.T
+        db = G @np.ones((Npts, 1))
 
         return dV, dU, dW, db, dc
+
+    def exploding(self, grad):
+        """ Mitigate exploding gradients
+        :param grad: weight gradient
+        :return: cliped version of the gradient matrix
+        """
+        grad = np.where(grad > 5, 5, grad)
+        grad = np.where(grad < -5, -5, grad)
+        return grad
 
     def update(self, dL_dV, dL_dU, dL_dW, dL_db, dL_dc, eta, eps = 1e-8):
         """ Updates weights
@@ -168,12 +280,12 @@ class VRNN:
         self.AdaGradTerm['b'] = m_b
         self.AdaGradTerm['c'] = m_c
 
-        self.V -= eta/np.sqrt(m_V + eps) * dL_dV
-        self.U -= eta/np.sqrt(m_U + eps) * dL_dU
-        self.W -= eta/np.sqrt(m_W + eps) * dL_dW
+        self.V -= eta/np.sqrt(m_V + eps) * self.exploding(dL_dV)
+        self.U -= eta/np.sqrt(m_U + eps) * self.exploding(dL_dU)
+        self.W -= eta/np.sqrt(m_W + eps) * self.exploding(dL_dW)
 
-        self.b -= eta/np.sqrt(m_b + eps) * dL_db
-        self.c -= eta/np.sqrt(m_c + eps) * dL_dc
+        self.b -= eta/np.sqrt(m_b + eps) * self.exploding(dL_db)
+        self.c -= eta/np.sqrt(m_c + eps) * self.exploding(dL_dc)
 
 
     def loss(self, Y, P):
@@ -190,6 +302,9 @@ class VRNN:
         """
         return self.lossData
 
+    def getWeigths(self):
+        return self.V,self.U, self.W, self.b, self.c
+
     #[dV_num, dU_num, dW_num, db_num, dc_num]
     def ComputeGradsNumSlow(self, X, Y, h = 1e-4):
         """ Computes numerical gradients
@@ -202,7 +317,8 @@ class VRNN:
         :return db_num: Numerical gradients for weight b
         :return dc_num: Numerical gradients for weight c
         """
-
+        m,_ = self.W.shape
+        h_init = np.zeros((m,1))
         # V
         dV_num = np.zeros(self.V.shape)
         for i in range(self.V.shape[0]):
@@ -210,12 +326,12 @@ class VRNN:
 
                 V_try = np.array(self.V)
                 V_try[i, j] -= h
-                _,_, _, P = self.train(X, V_try, self.U, self.W, self.b, self.c)
+                _,_, _, P = self.train(X, V_try, self.U, self.W, self.b, self.c, h_init)
                 c1 = self.loss(Y, P)
 
                 V_try = np.array(self.V)
                 V_try[i, j] += h
-                _,_, _, P = self.train(X, V_try, self.U, self.W, self.b, self.c)
+                _,_, _, P = self.train(X, V_try, self.U, self.W, self.b, self.c, h_init)
                 c2 = self.loss(Y, P)
 
                 dV_num[i,j] = (c2 - c1) / (2 * h)
@@ -226,12 +342,12 @@ class VRNN:
             for j in range(self.U.shape[1]):
                 U_try = np.array(self.U)
                 U_try[i, j] -= h
-                _,_, _, P = self.train(X, self.V, U_try, self.W, self.b, self.c)
+                _,_, _, P = self.train(X, self.V, U_try, self.W, self.b, self.c, h_init)
                 c1 = self.loss(Y, P)
 
                 U_try = np.array(self.U)
                 U_try[i, j] += h
-                _,_, _, P = self.train(X, self.V, U_try, self.W, self.b, self.c)
+                _,_, _, P = self.train(X, self.V, U_try, self.W, self.b, self.c, h_init)
                 c2 = self.loss(Y, P)
 
                 dU_num[i,j] = (c2 - c1) / (2 * h)
@@ -242,12 +358,12 @@ class VRNN:
             for j in range(self.W.shape[1]):
                 W_try = np.array(self.W)
                 W_try[i, j] -= h
-                _,_, _, P = self.train(X, self.V, self.U, W_try, self.b, self.c)
+                _,_, _, P = self.train(X, self.V, self.U, W_try, self.b, self.c, h_init)
                 c1 = self.loss(Y, P)
 
                 W_try = np.array(self.W)
                 W_try[i, j] += h
-                _,_, _, P = self.train(X, self.V, self.U, W_try, self.b, self.c)
+                _,_, _, P = self.train(X, self.V, self.U, W_try, self.b, self.c, h_init)
                 c2 = self.loss(Y, P)
 
                 dW_num[i,j] = (c2 - c1) / (2 * h)
@@ -257,12 +373,12 @@ class VRNN:
         for i in range(self.b.size):
             b_try = np.array(self.b)
             b_try[i] -= h
-            _,_, _, P = self.train(X, self.V, self.U, self.W, b_try, self.c)
+            _,_, _, P = self.train(X, self.V, self.U, self.W, b_try, self.c, h_init)
             c1 = self.loss(Y, P)
 
             b_try = np.array(self.b)
             b_try[i] += h
-            _,_, _, P = self.train(X, self.V, self.U, self.W, b_try, self.c)
+            _,_, _, P = self.train(X, self.V, self.U, self.W, b_try, self.c, h_init)
             c2 = self.loss(Y, P)
 
             db_num[i] = (c2 - c1) / (2 * h)
@@ -272,12 +388,12 @@ class VRNN:
         for i in range(self.c.size):
             c_try = np.array(self.c)
             c_try[i] -= h
-            _,_, _, P = self.train(X, self.V, self.U, self.W, self.b, c_try)
+            _,_, _, P = self.train(X, self.V, self.U, self.W, self.b, c_try,h_init)
             c1 = self.loss(Y, P)
 
             c_try = np.array(self.c)
             c_try[i] += h
-            _,_, _, P = self.train(X, self.V, self.U, self.W, self.b, c_try)
+            _,_, _, P = self.train(X, self.V, self.U, self.W, self.b, c_try, h_init)
             c2 = self.loss(Y, P)
 
             dc_num[i] = (c2 - c1) / (2 * h)
@@ -299,19 +415,22 @@ class VRNN:
         :param X: data points, shape = (K, Npts)
         :param Y: true labels, shape = (K, Npts)
         """
+        m, _ = self.W.shape
+        h_init = np.zeros((m,1))
+
         dV_num, dU_num, dW_num, db_num, dc_num = self.ComputeGradsNumSlow(
         X, Y
         )
 
-        H0, A, H, P = self.train(X, V, U, W, b, c)
+        H0, A, H, P = self.train(X, self.V, self.U, self.W, self.b, self.c, h_init)
 
         dV_an, dU_an, dW_an, db_an, dc_an = self.backward(X, H0, Y, P, H, A)
 
-        V_d = self.NumericalVSAnalytic(dV_num, dV_an)
-        U_d = self.NumericalVSAnalytic(dU_num, dU_an)
-        W_d = self.NumericalVSAnalytic(dW_num, dW_an)
-        b_d = self.NumericalVSAnalytic(db_num, db_an)
-        c_d = self.NumericalVSAnalytic(dc_num, dc_an)
+        V_d = self.difference(dV_num, dV_an)
+        U_d = self.difference(dU_num, dU_an)
+        W_d = self.difference(dW_num, dW_an)
+        b_d = self.difference(db_num, db_an)
+        c_d = self.difference(dc_num, dc_an)
 
         print("\x1b[94m =-=-=-=- Numerical vs Analytic gradients -=-=-=-= \x1b[39m")
         print("\x1b[94m =-=- V: \x1b[39m", V_d)
@@ -348,7 +467,7 @@ class VRNN:
                 h = h_new
 
             char = self.ind_to_char.item().get(char)
-            text += 'char'
+            text += char
 
         return text
 
@@ -390,6 +509,7 @@ class VRNN:
         self.c = np.zeros((K,1))
 
 
+
         ##
         ##  AdaGrad initialization
         ##
@@ -399,52 +519,90 @@ class VRNN:
         self.AdaGradTerm['b'] = 0
         self.AdaGradTerm['c'] = 0
 
+        #self.V,self.U, self.W, self.b, self.c = np.load('weigths.npy', allow_pickle = True)
+        #text = self.synthesize(np.zeros((m,1)), X[:, 1200].reshape(-1,1), 1000)
+        #print(text)
         #=-=-=-=-=-=-=-=-=-=-=-=-
         #   Analyze Gradients
         #=-=-=-=-=-=-=-=-=-=-=-=-
-        #X_analyze = X[:, 5: 50]
-        #Y_analyze = X[:, 5 + 1: 50 + 1]
-        #self.AnalyzeGradients(X, Y)
+        #X_analyze = X[:, 0: seq_length]
+        #Y_analyze = X[:, 0 + 1: seq_length + 1]
+        #self.AnalyzeGradients(X_analyze, Y_analyze)
 
+        #"""Training
+        print('\x1b[91m =-=-=-=- Network parameters -=-=-=-= \x1b[39m')
+        print('\x1b[91m =- epochs: \x1b[39m', epochs, '\x1b[91m learning_rate: \x1b[39m', eta)
+        print('\x1b[91m =- hidden_units: \x1b[39m', m, '\x1b[91m seq_length: \x1b[39m', seq_length)
+        print('\x1b[91m =-=-=-=- Starting training -=-=-=-= \n \x1b[39m')
 
-        print('\x1b[101m =-=-=-=- Network parameters -=-=-=-= \x1b[39m')
-        print('\x1b[101m =- epochs: \x1b[39m', epochs, '\x1b[101m learning_rate: \x1b[39m', eta)
-        print('\x1b[101m =- hidden_units: \x1b[39m', m, '\x1b[101m seq_length: \x1b[39m', seq_length)
-        print('\x1b[101m =-=-=-=- Starting training -=-=-=-= \n \x1b[39m')
+        #update_steps = X.shape[1] - seq_length - 1
 
-        update_steps = X.shape[1] - seq_length - 1
+        update_steps = round((X.shape[1] - seq_length)/seq_length)
+        smooth_loss = 0
+        N = 200
+        #text = self.synthesize(np.zeros((m,1)), X[:, 0].reshape(-1,1), N)
         for epoch in range(epochs):
             e = 0
             h_init = np.zeros((m,1))
 
             for itr in range(update_steps):
+            #for itr in range(10000):
 
+                #if e + seq_length + 1 > X.shape[1]:
+                #    break
+                step = itr + epoch * update_steps
                 X_train = X[:, e : e + seq_length]
                 Y_train = X[:, e + 1: e + seq_length + 1]
 
                 H0, A, H, P = self.train(X_train, self.V, self.U,
-                    self.W, self.b, self.c)
+                    self.W, self.b, self.c, h_init)
 
-                grads = self.backward(X, H0, Y, P, H, A)
+                grads = self.backward(X_train, H0, Y_train, P, H, A)
 
                 self.update(*grads, eta)
 
-                if itr == 500:
-                    c = self.loss(P, Y_train)
-                    if itr == 0:
-                        smooth_loss = c
-                    else:
-                        smooth_loss = 0.999 * smooth_loss + 0.001 * c
+                c = self.loss(P, Y_train)
 
-                    step = itr + epoch * itr
+                if itr == 0 and epoch == 0:
+                    smooth_loss = c
+                else:
+                    smooth_loss = 0.999 * smooth_loss + 0.001 * c
+
+                if step % 10000 == 0:
+                    #c = self.loss(P, Y_train)
+                    #if itr == 0 and epoch == 0:
+                    #    smooth_loss = c
+                    #else:
+                    #    smooth_loss = 0.999 * smooth_loss + 0.001 * c
+
+
                     self.lossData[0].append(step)
-                    self.lossData[1].append(c)
-
-                    print('iter: ', step, ' loss: ', smooth_loss)
+                    self.lossData[1].append(smooth_loss)
+                    text = self.synthesize(H0[:, 0].reshape(-1,1), X_train[:, 0].reshape(-1,1), N)
+                    print('epoch: ', epoch, ' iter: ', step, ' loss: ', smooth_loss)
                     print('Text: \n ', "\x1b[93m" + text + "\x1b[39m \n")
 
-                e += 1
+                h_init = H[:, -1].reshape(-1,1)
+                e += seq_length
 
-            print('\x1b[46m Epoch: \x1b[39m', epoch, '\n')
+            print('\x1b[36m Epoch: \x1b[39m', epoch, '\n')
 
-        print('\x1b[101m =-=-=-=- Training Complete -=-=-=-= \n \x1b[39m')
+        print('\x1b[91m =-=-=-=- Training Complete -=-=-=-= \n \x1b[39m')
+        #"""
+
+#=-=-=-=-=-=-=-=
+# Experiment
+#=-=-=-=-=-=-=-=
+data = getData()
+params = Params(
+    m = 100, seq_length = 25, eta = 0.1, sig = 0.1, epochs = 10
+    )
+
+vrnn = VRNN()
+vrnn.fit(data, params)
+loss = vrnn.getLoss()
+plotter(loss[0], loss[1])
+weigths = vrnn.getWeigths()
+
+np.save('weigths.npy', weigths)
+np.save('loss.npy', loss)
